@@ -55,6 +55,7 @@ All checked on the owner's Galaxy:
 ### 1.5 Out of scope
 
 - Replacing the lock screen, Glance (always-on display) or Android's own notification shade. A launcher can't do these without fragile workarounds that Play would reject.
+- Taking over Samsung's recent-apps screen and gesture animations. One UI keeps these in its own launcher, so with LiquiWin as Home, swiping up and holding to see recent apps takes about a second longer. LiquiWin can't change this.
 - Reading app feeds or messages through private or unofficial APIs. Tiles only know what apps put in their notifications.
 - Sending read receipts, or marking messages read inside other apps.
 - Music, Mail, Photos, People and the other built-in apps (sub-projects 2–5).
@@ -72,7 +73,11 @@ All checked on the owner's Galaxy:
   - Battery exemption goes through the settings screen. The launcher never shows the direct `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` prompt.
   - No `SYSTEM_ALERT_WINDOW`. All floating UI (quick reply, Action Center) lives inside the launcher's own window.
   - **No `INTERNET` permission in sub-project 1.** Notification content can't leave the phone, because the app has no network access at all.
-- **Branding.** No Microsoft names, logos or trademarks in the product name, icon or store listing, and no Segoe fonts. LiquiWin bundles Selawik (an open Segoe UI substitute) and open icon sets, and lists their licences in About. The reference document records the exact licences. No Apple trademarks either: the Glass style is never called "Liquid Glass".
+- **Branding.** No Microsoft names, logos or trademarks in the product name, icon or store listing, and no Segoe fonts. No Apple trademarks either: the Glass style is never called "Liquid Glass".
+  - **Preset names.** WP7, WP8.1, W10M and Modern Metro are working names for personal use. They get neutral names before a store release: "WP" stands for Windows Phone, and Microsoft itself stopped using "Metro" in 2012 over a trademark concern.
+  - **Fonts and icons.** LiquiWin bundles Selawik (an open Segoe UI substitute) and open icon sets, and lists their licences in About. The reference document records the exact licences.
+  - **Selawik covers Latin scripts only.** Text in other scripts, such as Hindi or Russian app names, uses the phone's own font.
+  - **Selawik ships unmodified.** Its licence (SIL OFL 1.1) counts subsetting or converting the font files as modification, which would require renaming the font.
 
 ---
 
@@ -209,7 +214,7 @@ Every facet is independent. A preset is a named set of facet values. Changing an
 | App list style | WP7 · WP8.1 · W10M | WP7 | WP8.1 | W10M | W10M | W10M |
 | App list entry | arrow · swipe · both | both | swipe | swipe | swipe | swipe |
 | Status bar | hidden until tapped · always shown | hidden | hidden | shown | shown | shown |
-| Motion | full · reduced · off, plus tile flip interval | full, 8 s | full, 8 s | full, 8 s | full, 8 s | full, 8 s |
+| Motion | full · reduced · off, plus tile pace: calm · normal · lively (§5.4) | full, normal | full, normal | full, normal | full, normal | full, normal |
 | App launch animation | turnstile · zoom from tile | turnstile | turnstile | turnstile | turnstile | zoom from tile |
 | Font | Selawik · phone font | Selawik | Selawik | Selawik | Selawik | Selawik |
 | Big lowercase page headers | on · off | on | on | on | on | on |
@@ -242,7 +247,7 @@ The status bar's "hidden until tapped" option hides Android's status bar on the 
 
 ### 4.2 Grid model
 
-- **Unit and sizes.** The grid unit is one small tile. Small is 1×1 units, medium 2×2, wide 4×2 and large 4×4.
+- **Unit and sizes.** The grid unit is one small tile. Small is 1×1 units, medium 2×2, wide 4×2 and large 4×4. Large is LiquiWin's own addition and works in every style: as far as the research shows, no Windows Phone release had large tiles on phones.
 - **Grid width.** The grid is the column count × 2 units wide, so 4, 6 or 8 units. Every tile size fits every width.
 - **Unit size.** The edge of one unit = (screen width − 2 × side margin − (units − 1) × gap) / units. Margin and gap come from the active preset's reference values.
 - **Arrangements.** Each grid width keeps its own arrangement in `tile_placement`. The first time a width is shown, tiles flow in the order of the most recently used width: row by row, top-left first, each placed in the first space it fits. Once the user edits at that width, the positions are saved.
@@ -430,10 +435,13 @@ On a combined tile, each content face also shows the item's app icon at top righ
 
 ### 5.4 Animation scheduling
 
+Tiles animate the way Windows Phone's did: a single timer for the whole start screen starts one tile at a time.
+
 - Only tiles on screen animate, and only while the start screen is resumed and the display is on.
-- A new item makes its tile flip to it within 1 s, debounced to once per 600 ms per tile.
-- Otherwise each tile flips at the motion facet's interval (default 8 s) plus a random 0–4 s. At most two tiles animate at the same time.
-- With motion off, a tile shows its newest item statically and there's no rotation timer.
+- **The timer.** The first tick comes 2.5 s after the start screen appears, then every 0.1–3 s at random, in 100 ms steps. Each tick moves one random tile on screen to its next face. Only tiles with a non-empty rotation (§5.3) and a moving template (not `ICONIC` or `STATIC`) take part. A tile that has just moved sits out the next 3 ticks, and if every such tile is sitting out, the tick does nothing.
+- **Tile pace** (part of the motion facet) scales the gaps between ticks: normal is the Windows Phone timing above, calm doubles the gaps and lively halves them.
+- **New items jump the queue.** A new item makes its tile flip to it within 1 s, even while another tile is moving, debounced to once per 600 ms per tile.
+- With motion off, a tile shows its newest item statically and there's no timer.
 
 ### 5.5 Taps
 
@@ -485,7 +493,7 @@ Opening an item marks it read.
 
 | Style | Behaviour |
 |---|---|
-| WP7 | Opened with the arrow button; a plain A–Z list with icons |
+| WP7 | Opened with the arrow button or a flick left; a plain A–Z list with icons. With 45 or more apps it gains letter headers and the alphabet grid, as WP7.5 did. |
 | WP8.1 | Swipe left to open; search box at the top; letter headers; a "new" label on apps installed in the last 3 days |
 | W10M | Everything in WP8.1, plus "recently added" (the last 3 installs) at the top |
 
@@ -580,7 +588,7 @@ The standard Windows Phone settings list: each entry shows a title with its curr
 | Section | Contents |
 |---|---|
 | style | Presets and every facet (§4.1) |
-| start screen | Lock layout, tile flip interval |
+| start screen | Lock layout, tile pace |
 | live tiles | Notification access health, ignored apps, keep read items, hide previews, history length (24 h default), clear history |
 | app list | Style, entry, hidden apps, "new" label |
 | search | Which providers are on, web search engine |
@@ -647,9 +655,9 @@ The standard Windows Phone settings list: each entry shows a title with its curr
 - **Unit tests** (JVM, with Robolectric where Android classes are needed):
   - Layout engine: first-fit flow, compaction, per-width arrangements, collision re-flow after a resize, folder create and dissolve.
   - Normaliser: run against fixture notifications from WhatsApp, Instagram, Snapchat, Messenger, Telegram and Gmail. The fixtures are recorded once on the owner's Galaxy with a debug-only capture screen, which strips names and text before saving.
-  - Unread counting and dedupe, the tap fallback chain, search ranking, and facet/preset resolution (including when the label switches to "Custom").
+  - Unread counting and dedupe, the tap fallback chain, the animation timer (one tile per tick, the 3-tick rest, new items jumping the queue), search ranking, and facet/preset resolution (including when the label switches to "Custom").
 - **Database tests:** Room DAO tests and a migration test for every schema version.
-- **Screenshot tests** (Roborazzi): every flat preset in light and dark × every tile size × every template, the hub, quick reply, the app list styles and the Action Center layouts. A change to one style can't silently break another.
+- **Screenshot tests** (Roborazzi): every flat preset in light and dark × every tile size × every template, the hub, quick reply, the app list styles and the Action Center layouts, plus app names in Devanagari and Cyrillic to check the font fallback. A change to one style can't silently break another.
 - **Glass tests:** shaders need a GPU, which JVM screenshot tests don't have.
   - Instrumented screenshot tests run the Glass preset on an Android 14+ emulator with GPU rendering, and the results are reviewed on the Galaxy.
   - The morph state machine (which elements merge, spring targets, hit-test positions) and the signed-distance geometry are unit-tested on the JVM.
@@ -658,7 +666,7 @@ The standard Windows Phone settings list: each entry shows a title with its curr
 - **`:tools:notifier`:** a debug app that posts WhatsApp-like and Instagram-like MessagingStyle notifications, with reply actions that echo the reply back. It allows end-to-end tests of tiles and quick reply on the emulator without real accounts.
 - **Macrobenchmark:** cold and warm start, start screen scroll jank, and a Baseline Profile.
 - **Manual checklist on the Galaxy:**
-  - setting it as Home, gesture navigation and back
+  - setting it as Home, gesture navigation and back (expect the longer hold for recent apps, §1.5)
   - granting and revoking notification access
   - a day under battery management with the sleeping-apps settings
   - real messages and quick replies in WhatsApp, Instagram, Messenger and Telegram
