@@ -1,6 +1,7 @@
 package io.github.b1tsagar.liquiwin.feature.start
 
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.click
@@ -12,6 +13,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.b1tsagar.liquiwin.core.data.apps.LauncherApp
 import io.github.b1tsagar.liquiwin.core.design.theme.LiquiWinTheme
@@ -24,6 +27,7 @@ import io.github.b1tsagar.liquiwin.core.tiles.model.TileSize
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -37,10 +41,10 @@ class StartScreenTest {
     private val catalog = FakeAppCatalog(apps = listOf(camera, maps, mail))
 
     // Pins the apps (medium tiles at (0,0), (2,0) and (4,0) by default), then shows the start screen.
-    private fun show(pinned: List<LauncherApp> = listOf(camera, maps, mail)) {
+    private fun show(pinned: List<LauncherApp> = listOf(camera, maps, mail), scroll: ScrollState? = null) {
         val viewModel = StartViewModel(store, catalog, gridWidth = 6)
         pinned.forEach { viewModel.pin(it.key) }
-        compose.setContent { LiquiWinTheme { StartScreen(viewModel, { null }, rememberScrollState()) } }
+        compose.setContent { LiquiWinTheme { StartScreen(viewModel, { null }, scroll ?: rememberScrollState()) } }
     }
 
     private fun longPressCamera() = compose.onNodeWithTag("tile-1").performTouchInput { longClick() }
@@ -88,6 +92,20 @@ class StartScreenTest {
             listOf(TilePlacement(2, 6, 0, 0), TilePlacement(1, 6, 2, 0), TilePlacement(3, 6, 4, 0)),
             runBlocking { store.placements(6).first() },
         )
+    }
+
+    // Spec §4.3 moves the lifted tile; a swipe anywhere else still scrolls the one vertical scroll (§4.2).
+    @Test fun inEditModeASwipeOnAnotherTileScrollsInsteadOfMovingIt() {
+        val apps = listOf(camera, maps, mail) + (1..15).map { testApp("App $it") }
+        catalog.apps.value = apps
+        val scroll = ScrollState(0)
+        show(pinned = apps, scroll = scroll)
+        longPressCamera()
+        val before = runBlocking { store.placements(6).first() }
+        compose.onNodeWithTag("tile-5").performTouchInput { swipe(center, center - Offset(0f, 140.dp.toPx())) }
+        compose.waitForIdle()
+        assertTrue(scroll.value > 0)
+        assertEquals(before, runBlocking { store.placements(6).first() })
     }
 
     @Test fun backAndEmptySpaceLeaveEditMode() {

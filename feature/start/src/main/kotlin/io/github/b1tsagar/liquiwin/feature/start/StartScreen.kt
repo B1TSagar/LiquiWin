@@ -89,7 +89,8 @@ private const val EMPTY_HINT = "swipe left for your apps. long-press one and cho
 
 /**
  * The start screen: the tile grid with edit mode. Outside edit mode a tap opens a tile, and a long-press enters edit
- * mode and lets the finger drag the tile straight away. In edit mode a tap selects a tile and a drag moves it.
+ * mode and lets the finger drag the tile straight away. In edit mode a tap selects a tile, the selected tile moves with
+ * a drag, and any other tile moves after a long-press, so a swipe on it still scrolls.
  */
 @Composable
 fun StartScreen(
@@ -219,6 +220,7 @@ private fun TileSlot(
     val dim by animateFloatAsState(if (edit != null && !selected) 0.4f else 1f, label = "tile dim")
     val current by rememberUpdatedState(tile)
     val editing by rememberUpdatedState(edit != null)
+    val selectedNow by rememberUpdatedState(selected)
     val coords = remember { CoordinatesRef() }
     Box(
         Modifier
@@ -239,7 +241,8 @@ private fun TileSlot(
             .pointerInput(tile.id) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    if (!editing) {
+                    // Only the lifted tile moves at a touch; any other needs a long-press, so a swipe on it scrolls.
+                    if (!editing || !selectedNow) {
                         var cancelled = false
                         val up = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
                             waitForUpOrCancellation().also { if (it == null) cancelled = true }
@@ -247,7 +250,7 @@ private fun TileSlot(
                         if (cancelled) return@awaitEachGesture
                         if (up != null) {
                             up.consume()
-                            controller.tap(current, coords.value, editing = false)
+                            controller.tap(current, coords.value, editing)
                             return@awaitEachGesture
                         }
                         controller.longPress(current)
