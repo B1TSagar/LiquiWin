@@ -42,11 +42,16 @@ object GridLayout {
 
     fun remove(tiles: List<Placed>, id: Long, width: Int): List<Placed> = compact(tiles.filter { it.id != id }, width)
 
-    /** Fixes the tile at [target], clamped into the grid, and re-flows the others from the first one it collides with. */
+    /**
+     * Lifts the tile out and closes the gap it leaves, then fixes it at [target], clamped into the grid, and re-flows
+     * the others from the first one it collides with.
+     */
     fun move(tiles: List<Placed>, id: Long, target: Cell, width: Int): List<Placed> {
         val tile = tiles.firstOrNull { it.id == id } ?: return tiles
         val cell = Cell(target.x.coerceIn(0, width - tile.size.widthUnits), target.y.coerceAtLeast(0))
-        return reflowAround(tile.copy(cell = cell), tiles, width)
+        if (cell == tile.cell) return tiles
+        // Lifted first: left in place, its own empty cells would float it straight back up in the final compaction.
+        return reflowAround(tile.copy(cell = cell), compact(tiles.filter { it.id != id }, width), width)
     }
 
     /** Keeps the tile's cell, shifted left if it would stick out, and re-flows the others from the first collision. */

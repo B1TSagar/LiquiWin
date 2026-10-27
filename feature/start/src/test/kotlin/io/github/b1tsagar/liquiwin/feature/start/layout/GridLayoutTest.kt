@@ -45,6 +45,16 @@ class GridLayoutTest {
         assertEquals(mapOf(1L to Cell(0, 0), 3L to Cell(2, 0), 2L to Cell(0, 2)), cells(out))
     }
 
+    @Test fun moveDownTheSameColumnSwapsWithTheTileBelow() {
+        val out = GridLayout.move(listOf(p(1, MEDIUM, 0, 0), p(2, MEDIUM, 0, 2)), id = 1, target = Cell(0, 2), width = 4)
+        assertEquals(mapOf(2L to Cell(0, 0), 1L to Cell(0, 2)), cells(out))
+    }
+
+    @Test fun droppingATileWhereItWasChangesNothing() {
+        val start = listOf(p(1, MEDIUM, 0, 0), p(2, MEDIUM, 0, 2))
+        assertEquals(start, GridLayout.move(start, id = 1, target = Cell(0, 0), width = 4))
+    }
+
     @Test fun moveKeepsWideTilesInsideTheGridAndBelowNothing() {
         assertEquals(Cell(0, 0), cells(GridLayout.move(listOf(p(1, WIDE, 0, 0)), id = 1, target = Cell(3, 5), width = 4))[1])
     }
