@@ -1,0 +1,114 @@
+package io.github.b1tsagar.liquiwin.home
+
+import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
+import androidx.compose.ui.test.swipeUp
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.b1tsagar.liquiwin.core.data.apps.LauncherApp
+import io.github.b1tsagar.liquiwin.core.design.theme.LiquiWinTheme
+import io.github.b1tsagar.liquiwin.core.testing.FakeAppCatalog
+import io.github.b1tsagar.liquiwin.core.testing.FakeTileStore
+import io.github.b1tsagar.liquiwin.core.testing.MainDispatcherRule
+import io.github.b1tsagar.liquiwin.core.testing.appTile
+import io.github.b1tsagar.liquiwin.core.testing.testApp
+import kotlinx.coroutines.flow.MutableSharedFlow
+import org.junit.Assert.assertEquals
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+
+@RunWith(AndroidJUnit4::class)
+class HomeRootTest { // Review Focus 5
+    @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+    @get:Rule val mainDispatcher = MainDispatcherRule()
+    private val camera = testApp("Camera"); private val maps = testApp("Maps"); private val mail = testApp("Mail")
+    private val store = FakeTileStore()
+    private val presses = MutableSharedFlow<HomePress>(extraBufferCapacity = 1)
+    private var setHomeCalls = 0
+
+    private fun show(apps: List<LauncherApp> = listOf(camera, maps, mail), pinned: List<LauncherApp> = emptyList(), isDefaultHome: Boolean = true) {
+        store.seed(tiles = pinned.mapIndexed { i, app -> appTile(i + 1L, app.key) }, placements = emptyMap())
+        val deps = HomeDependencies(store, FakeAppCatalog(apps = apps), { isDefaultHome }, onSetHome = { setHomeCalls++ }, onOpenHomeSettings = {})
+        compose.setContent { LiquiWinTheme { HomeRoot(deps, presses) } }
+    }
+
+    // The app list groups its apps off the main thread; a tile has no text, so a text match is an app list row.
+    private fun swipeToAppList(row: String = "Maps") {
+        compose.onRoot().performTouchInput { swipeLeft() }
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(row).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    private fun press(press: HomePress) {
+        compose.runOnUiThread { presses.tryEmit(press) }
+        compose.waitForIdle()
+    }
+
+    @Test fun homeWhileOnHomeReturnsToTheTopOfStart() {
+        val apps = listOf(camera) + (1..29).map { testApp("App $it") }
+        show(apps = apps, pinned = apps)
+        compose.onRoot().performTouchInput { swipeUp() }
+        compose.onNodeWithTag("tile-1").assertIsNotDisplayed()
+        swipeToAppList(row = "App 1")
+        press(HomePress.WHILE_ON_HOME)
+        compose.onNodeWithTag("tile-1").assertIsDisplayed()
+    }
+
+    @Test fun homeFromAnAppClosesSearchEditModeAndMenus() {
+        show(pinned = listOf(camera))
+        swipeToAppList()
+        compose.onNodeWithText("search apps").performClick()
+        compose.onNode(hasSetTextAction()).assertExists()
+        press(HomePress.FROM_APP)
+        compose.onNode(hasSetTextAction()).assertDoesNotExist()
+        compose.onNodeWithTag("tile-1").assertIsDisplayed()
+
+        compose.onNodeWithTag("tile-1").performTouchInput { longClick() }
+        compose.onNodeWithContentDescription("done").assertExists()
+        press(HomePress.FROM_APP)
+        compose.onNodeWithContentDescription("done").assertDoesNotExist()
+
+        swipeToAppList()
+        compose.onNodeWithText("Maps").performTouchInput { longClick() }
+        compose.onNodeWithText("pin to start").assertExists()
+        press(HomePress.FROM_APP)
+        swipeToAppList()
+        compose.onNodeWithText("pin to start").assertDoesNotExist()
+    }
+
+    @Test fun backFromTheAppListReturnsToStart() {
+        show()
+        swipeToAppList()
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithText("swipe left for your apps. long-press one and choose pin to start.").assertIsDisplayed()
+    }
+
+    @Test fun pinFromTheAppListAppearsOnStart() {
+        show()
+        swipeToAppList()
+        compose.onNodeWithText("Maps").performTouchInput { longClick() }
+        compose.onNodeWithText("pin to start").performClick()
+        compose.onRoot().performTouchInput { swipeRight() }
+        compose.onNode(hasContentDescription("Maps")).assertExists()
+    }
+
+    @Test fun theBannerShowsOnlyWhenNotTheHomeApp() {
+        show(isDefaultHome = false)
+        compose.onNodeWithText("liquiwin isn't your home app yet").assertExists()
+        compose.onNodeWithText("set").performClick()
+        assertEquals(1, setHomeCalls)
+    }
+}
