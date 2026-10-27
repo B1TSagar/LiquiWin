@@ -83,7 +83,7 @@ All checked on the owner's Galaxy:
 | Module | Responsibility | Depends on |
 |---|---|---|
 | `:app` | Home activity; navigation and routing between start, app list, hub, quick reply, Action Center and settings; first-time setup; crash safe mode; dependency wiring | all modules below |
-| `:core:design` | The Metro design system in Compose: type ramp, accent palettes, theme, style facets and presets, controls (Pivot, AppBar, tilt), motion (turnstile, continuum, flip, peek, swivel) | — |
+| `:core:design` | The Metro design system in Compose: type ramp, accent palettes, theme, style facets and presets, controls (Pivot, AppBar, tilt), motion (turnstile, continuum, flip, peek, swivel), and the Glass material (shaders, morph system, built-in backgrounds) | — |
 | `:core:data` | Room database (including the notification store), DataStore preferences, `AppRepository` (launchable apps through `LauncherApps`, icon cache, launch stats), migrations, export and import | — |
 | `:core:tiles` | Tile model, `TileSource` interface, `SourceRegistry`, tile-state aggregation, tile templates and renderers | `:core:design`, `:core:data` |
 | `:feature:notifications` | `NotificationListenerService`, normaliser, live action cache, `AppNotificationSource` (implements `TileSource`, including open and reply) | `:core:tiles`, `:core:data` |
@@ -603,6 +603,7 @@ The standard Windows Phone settings list: each entry shows a title with its curr
 | Do Not Disturb action | Notification policy access | First use | Opens Do Not Disturb settings instead |
 | Brightness and auto-rotate actions | `WRITE_SETTINGS` ("Modify system settings") | First use | Opens display settings instead |
 | Flashlight | None (torch API) | — | — |
+| Glass "light follows tilt" | None (rotation-vector sensor) | — | — |
 | Background photo | Android photo picker (no permission) | Setup step 4; settings | Theme-colour background |
 | Staying awake on Samsung | None; the user sets App info → Battery → Unrestricted | Setup step 6 | The paused banner appears if tiles pause |
 | Haptics | `VIBRATE` (normal permission) | — | — |
