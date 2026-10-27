@@ -1,7 +1,7 @@
 # LiquiWin Launcher — Sub-project 1: launcher shell, start screen and live tiles
 
 **Date:** 2026-10-27
-**Status:** Draft for review
+**Status:** Approved 2026-10-27
 **Author:** Sagar, with Claude
 **Working name:** LiquiWin, matching the repository [B1TSagar/LiquiWin](https://github.com/B1TSagar/LiquiWin). Check the name before a store release, because names that echo "Windows" have drawn Microsoft trademark challenges before (Lindows became Linspire).
 
@@ -89,7 +89,7 @@ All checked on the owner's Galaxy:
 |---|---|---|
 | `:app` | Home activity; navigation and routing between start, app list, hub, quick reply, Action Center and settings; first-time setup; crash safe mode; dependency wiring | all modules below |
 | `:core:design` | The Metro design system in Compose: type ramp, accent palettes, theme, style facets and presets, controls (Pivot, AppBar, tilt), motion (turnstile, continuum, flip, peek, swivel), and the Glass material (shaders, morph system, built-in backgrounds) | — |
-| `:core:data` | Room database (including the notification store), DataStore preferences, `AppRepository` (launchable apps through `LauncherApps`, icon cache, launch stats), migrations, export and import | — |
+| `:core:data` | Room databases (`layout.db` for tiles; `cache.db` for the cached app list and the notification store), DataStore preferences, `AppRepository` (launchable apps through `LauncherApps`, icon cache, launch stats), migrations, export and import | — |
 | `:core:tiles` | Tile model, `TileSource` interface, `SourceRegistry`, tile-state aggregation, tile templates and renderers | `:core:design`, `:core:data` |
 | `:feature:notifications` | `NotificationListenerService`, normaliser, live action cache, `AppNotificationSource` (implements `TileSource`, including open and reply) | `:core:tiles`, `:core:data` |
 | `:feature:start` | Start grid, layout engine, edit mode, tile editor, live folders, widget tiles, pin requests | `:core:tiles` |
@@ -173,6 +173,7 @@ interface SearchProvider {
 - Style settings, onboarding progress and per-feature settings live in DataStore.
 - Avatars are downscaled to at most 256 px and photos to at most 720 px. They're stored in an app-private cache and deleted with their items.
 - Android Auto Backup includes the tile tables and DataStore. It excludes `notification_item`, `conversation_read` and the image cache.
+- Auto Backup works on whole files, so the tables live in two Room databases. `layout.db` holds the tile tables and is backed up. `cache.db` holds the notification tables and the cached app list, and isn't.
 
 ### 3.4 Data flow
 
@@ -605,6 +606,7 @@ The standard Windows Phone settings list: each entry shows a title with its curr
 | Being the Home app | `ROLE_HOME` via `RoleManager` | Setup step 8; settings | LiquiWin works as a normal app, and Home still goes to the old launcher |
 | Live tiles, hub, Action Center notifications, quick reply | Notification access (`BIND_NOTIFICATION_LISTENER_SERVICE`, granted in Settings) | Setup step 5; the paused banner | Tiles show icons only; hub, Action Center notifications and reply are hidden |
 | Listing apps | `<queries>` MAIN/LAUNCHER + `LauncherApps` | — | — |
+| Uninstalling from the app list | `REQUEST_DELETE_PACKAGES` (normal permission); Android still confirms each uninstall | — | — |
 | Shortcut search results, pinned shortcuts | Default-home status (shortcut host permission) | — | Those features are unavailable |
 | Contacts in search | `READ_CONTACTS` | First contact search | Contacts are skipped |
 | Widgets | Android's widget bind consent, once per provider | When adding a widget | The widget isn't added |
