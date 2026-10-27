@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Backs up the tile layout and DataStore. cache.db (cached apps, notifications) stays out. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="database" path="layout.db" />
+        <include domain="database" path="layout.db-wal" />
+        <include domain="database" path="layout.db-shm" />
+        <include domain="file" path="datastore/" />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="database" path="layout.db" />
+        <include domain="database" path="layout.db-wal" />
+        <include domain="database" path="layout.db-shm" />
+        <include domain="file" path="datastore/" />
+    </device-transfer>
+</data-extraction-rules>

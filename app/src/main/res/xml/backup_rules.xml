@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 10 and 11. Backs up the tile layout and DataStore. cache.db (cached apps, notifications) stays out. -->
+<full-backup-content>
+    <include domain="database" path="layout.db" />
+    <include domain="database" path="layout.db-wal" />
+    <include domain="database" path="layout.db-shm" />
+    <include domain="file" path="datastore/" />
+</full-backup-content>

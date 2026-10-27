@@ -1,0 +1,203 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "0ceb593542abd341a68314b560f24983",
+    "entities": [
+      {
+        "tableName": "tile",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `kind` TEXT NOT NULL, `size` TEXT NOT NULL, `template` TEXT NOT NULL, `title` TEXT, `color_override` INTEGER, `surface_override` TEXT, `show_previews` INTEGER NOT NULL DEFAULT 1, `keep_read_items_24h` INTEGER NOT NULL DEFAULT 0, `parent_folder_id` INTEGER, `app_widget_id` INTEGER, `shortcut_ref` TEXT, `app_key` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "size",
+            "columnName": "size",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "template",
+            "columnName": "template",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "colorOverride",
+            "columnName": "color_override",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "surfaceOverride",
+            "columnName": "surface_override",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "showPreviews",
+            "columnName": "show_previews",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          },
+          {
+            "fieldPath": "keepReadItems24h",
+            "columnName": "keep_read_items_24h",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "parentFolderId",
+            "columnName": "parent_folder_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "appWidgetId",
+            "columnName": "app_widget_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "shortcutRef",
+            "columnName": "shortcut_ref",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "appKey",
+            "columnName": "app_key",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "tile_source",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`tile_id` INTEGER NOT NULL, `source_id` TEXT NOT NULL, `sort_order` INTEGER NOT NULL, PRIMARY KEY(`tile_id`, `source_id`), FOREIGN KEY(`tile_id`) REFERENCES `tile`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "tileId",
+            "columnName": "tile_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceId",
+            "columnName": "source_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sortOrder",
+            "columnName": "sort_order",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "tile_id",
+            "source_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_tile_source_source_id",
+            "unique": false,
+            "columnNames": [
+              "source_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tile_source_source_id` ON `${TABLE_NAME}` (`source_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tile",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "tile_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "tile_placement",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`tile_id` INTEGER NOT NULL, `grid_width` INTEGER NOT NULL, `x` INTEGER NOT NULL, `y` INTEGER NOT NULL, PRIMARY KEY(`tile_id`, `grid_width`), FOREIGN KEY(`tile_id`) REFERENCES `tile`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "tileId",
+            "columnName": "tile_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gridWidth",
+            "columnName": "grid_width",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "x",
+            "columnName": "x",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "y",
+            "columnName": "y",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "tile_id",
+            "grid_width"
+          ]
+        },
+        "foreignKeys": [
+          {
+            "table": "tile",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "tile_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '0ceb593542abd341a68314b560f24983')"
+    ]
+  }
+}
