@@ -29,6 +29,10 @@ class AppGrouperTest { // Review Focus 3
         assertEquals(listOf("z", "я", "ह"), index.sections.map { it.label })
     }
 
+    // Two headers with one label share a LazyColumn key, which crashes the list.
+    @Test fun caseVariantsOfAnOtherScriptLetterShareOneGroup() =
+        assertEquals(listOf("я"), grouper.group(listOf(testApp("Яндекс"), testApp("яндекс Go"))).sections.map { it.label })
+
     @Test fun theLetterGridListsEveryLetterAndMarksEmptyOnes() {
         val letters = grouper.group(listOf(testApp("Camera"))).letters
         assertEquals("#", letters.first().label)

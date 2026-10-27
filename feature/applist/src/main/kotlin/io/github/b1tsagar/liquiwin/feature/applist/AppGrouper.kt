@@ -38,6 +38,7 @@ class AppGrouper(private val locale: Locale) {
         val first = app.label.takeIf { it.isNotEmpty() }?.codePointAt(0)
         if (first == null || !Character.isLetter(first)) return HASH
         val bucket = index.getBucket(index.getBucketIndex(app.label))
-        return if (bucket.labelType == AlphabeticIndex.Bucket.LabelType.NORMAL) bucket.label else String(Character.toChars(first))
+        // Other scripts group by their first letter, case folded so "Я" and "я" make one section.
+        return if (bucket.labelType == AlphabeticIndex.Bucket.LabelType.NORMAL) bucket.label else String(Character.toChars(first)).lowercase(locale)
     }
 }
