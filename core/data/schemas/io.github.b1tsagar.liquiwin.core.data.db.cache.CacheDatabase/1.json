@@ -1,0 +1,79 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "3b082a25c828db42f83d41bccd7d0271",
+    "entities": [
+      {
+        "tableName": "app_entry",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`app_key` TEXT NOT NULL, `label` TEXT NOT NULL, `first_install_time` INTEGER NOT NULL, `is_work` INTEGER NOT NULL, `version_token` TEXT NOT NULL, PRIMARY KEY(`app_key`))",
+        "fields": [
+          {
+            "fieldPath": "appKey",
+            "columnName": "app_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "label",
+            "columnName": "label",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "firstInstallTime",
+            "columnName": "first_install_time",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isWork",
+            "columnName": "is_work",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "versionToken",
+            "columnName": "version_token",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "app_key"
+          ]
+        }
+      },
+      {
+        "tableName": "app_launch",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`app_key` TEXT NOT NULL, `last_launched_at` INTEGER NOT NULL, PRIMARY KEY(`app_key`))",
+        "fields": [
+          {
+            "fieldPath": "appKey",
+            "columnName": "app_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastLaunchedAt",
+            "columnName": "last_launched_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "app_key"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '3b082a25c828db42f83d41bccd7d0271')"
+    ]
+  }
+}
