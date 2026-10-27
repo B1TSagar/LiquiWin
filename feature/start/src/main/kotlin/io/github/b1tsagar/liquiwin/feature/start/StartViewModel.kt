@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 
 data class StartState(val gridWidth: Int, val tiles: List<StartTile>, val edit: EditState?, val loaded: Boolean)
 
@@ -124,12 +125,21 @@ class StartViewModel(private val store: TileStore, private val catalog: AppCatal
         edit.update { it?.copy(preview = GridLayout.move(placed, tileId, cell, gridWidth).associate { p -> p.id to p.cell }) }
     }
 
-    fun endDrag(tileId: Long, cell: Cell) = locked {
-        val tiles = store.tiles.first()
-        if (tiles.none { it.id == tileId }) return@locked
-        val moved = GridLayout.move(arrangement(gridWidth, tiles.sizes()), tileId, cell, gridWidth)
-        store.commit(LayoutEdit(placements = mapOf(gridWidth to moved.toPlacements(gridWidth))))
-        edit.update { it?.copy(preview = null) }
+    fun endDrag(tileId: Long, cell: Cell) {
+        viewModelScope.launch {
+            val moved = mutex.withLock {
+                val tiles = store.tiles.first()
+                if (tiles.none { it.id == tileId }) return@withLock null
+                GridLayout.move(arrangement(gridWidth, tiles.sizes()), tileId, cell, gridWidth)
+                    .also { store.commit(LayoutEdit(placements = mapOf(gridWidth to it.toPlacements(gridWidth)))) }
+            } ?: return@launch
+            // The store publishes the saved move a moment after the commit. Until then the preview shows it, so the
+            // tiles don't jump back to their old cells; a newer drag's preview is left alone.
+            val dropped = edit.value?.preview
+            val cells = moved.associate { it.id to it.cell }
+            withTimeoutOrNull(1_000) { state.first { s -> s.tiles.all { cells[it.id] == it.cell } } }
+            edit.update { if (it != null && it.preview === dropped) it.copy(preview = null) else it }
+        }
     }
 
     fun cancelDrag() = edit.update { it?.copy(preview = null) }
