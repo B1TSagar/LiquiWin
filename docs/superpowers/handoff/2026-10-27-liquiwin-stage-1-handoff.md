@@ -58,7 +58,7 @@ Sub-project 1 ships in six stages (spec §11). Stage 1, "usable home screen", is
 | 7. Watch it fail | Not started |
 | 8. Manifest, `LiquiWinApp`, `HomeActivity`, theme, icon, `.gitignore` | Not started. This step also writes `src/test/resources/robolectric.properties` (`sdk=36`) in all eight modules (ruling 3). |
 | 9. Test and `assembleDebug` | Not started |
-| 10. Commit | Steps 1–6 are in the commit "WIP Task 1: wrapper, version catalog, build files and the failing manifest test". Step 10 commits the rest with the plan's message. |
+| 10. Commit | Steps 1–6 are in commit 9c2b5cd, "WIP Task 1: wrapper, version catalog, build files and the failing manifest test". Step 10 commits the rest with the plan's message. |
 
 Tasks 2–12 haven't started. After Task 11, three things remain:
 
@@ -96,6 +96,7 @@ These are also in the ledger below, in its format.
 2. **Wrapper command.** The plan's wrapper command failed on the first PC. Its URL check timed out, because GitHub's CDN was unreachable. The wrapper was generated with `--no-validate-url` and the distribution's SHA-256 instead, so `gradle-wrapper.properties` has `validateDistributionUrl=false` and a `distributionSha256Sum`. Both stay: the checksum makes every machine verify the zip, and the flag only governs a reachability check.
 3. **Robolectric properties.** Task 1's file list names `src/test/resources/robolectric.properties` (`sdk=36`) in all eight modules, but no step writes them. Step 8 writes them.
 4. **Extra ignore entries.** On the first PC the worktree sat inside the main checkout, at `.claude/worktrees/`. Step 8's `.gitignore` also lists `.claude/worktrees/` and `.superpowers/`.
+5. **Line endings.** Git for Windows checks text files out with CRLF by default. That breaks `./gradlew` under Git Bash, which is the shell Claude Code's Bash tool uses. A `.gitattributes`, the same one `gradle init` writes, keeps `gradlew` LF, `*.bat` CRLF and `*.jar` binary. It was added while pausing, in its own commit.
 
 ## Machine setup
 
@@ -173,7 +174,8 @@ Task 1: Ruling: this PC's JVMs can't open AF_UNIX sockets under %TEMP%, so Gradl
 Task 1: Ruling: services.gradle.org redirects to GitHub's CDN, one CDN address (185.199.109.133) times out from this PC and Java doesn't fall back, so the plan's wrapper command failed its URL check — generated the wrapper with --no-validate-url and --gradle-distribution-sha256-sum 21bd5da2de49b642904077f38c0efdc7778e92b3ed0889392dca61b97e389607, and kept validateDistributionUrl=false and distributionSha256Sum, because the checksum makes every machine verify the zip and the flag only governs a reachability check — cost if wrong: one properties line.
 Task 1: Ruling: the Files list names src/test/resources/robolectric.properties (sdk=36) in all eight modules, but no step writes them — write them in step 8 with the other files — cost if wrong: step 9's Robolectric run uses its default SDK.
 Task 1: Ruling: the worktree sits inside the main checkout (.claude/worktrees/), and step 8's .gitignore list covers neither it nor the executor's .superpowers/ workspace — add .claude/worktrees/ and .superpowers/ to .gitignore in step 8 — cost if wrong: two extra ignore lines.
-Task 1: Paused 2026-10-27 after step 6: the owner is moving to another PC. Steps 1–6 are committed as WIP. Step 1's `gradlew --version` is unverified: the Gradle download (PowerShell, about 60 KB/s) was stopped at 61.5 of 151.6 MB and the partial file deleted. Handoff: docs/superpowers/handoff/2026-10-27-liquiwin-stage-1-handoff.md.
+Task 1: Ruling: Git for Windows checks text files out with CRLF by default, which breaks ./gradlew under Git Bash (the shell of Claude Code's Bash tool), and the plan has no .gitattributes — added the one gradle init writes (gradlew LF, *.bat CRLF, *.jar binary) — cost if wrong: one small file.
+Task 1: Paused 2026-10-27 after step 6: the owner is moving to another PC. Steps 1–6 are committed as WIP (9c2b5cd). Step 1's `gradlew --version` is unverified: the Gradle download (PowerShell, about 60 KB/s) was stopped at 61.5 of 151.6 MB and the partial file deleted. Handoff: docs/superpowers/handoff/2026-10-27-liquiwin-stage-1-handoff.md.
 ```
 
 When stage 1 is finished, the finishing step either deletes this handoff file or keeps it as history.
