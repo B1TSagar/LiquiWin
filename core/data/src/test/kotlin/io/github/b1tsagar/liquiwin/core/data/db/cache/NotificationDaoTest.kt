@@ -27,6 +27,9 @@ class NotificationDaoTest {
 
     private suspend fun unread(source: String = whatsapp) = dao.observeItems(source).first().filter { it.unread }.map { it.item.key }
 
+    private fun hidden(conversation: String, name: String, at: Long, source: String = whatsapp) =
+        HiddenConversationEntity(source, conversation, name, at)
+
     @Test fun aMessageIsUnreadUntilItsConversationIsReadUpToIt() = runTest {
         dao.replaceNotification("n1", listOf(item("a", 100), item("b", 200)))
         assertEquals(listOf("b", "a"), unread())
@@ -88,5 +91,38 @@ class NotificationDaoTest {
         // The old read mark went too, so an item older than it counts as unread again.
         dao.replaceNotification("t2", listOf(item("older", 5, notification = "t2", source = telegram)))
         assertEquals(listOf("older"), unread(telegram))
+    }
+
+    // Review Focus 4
+    @Test fun aHiddenChatLeavesItsSourcesItemsUntilShownAgain() = runTest {
+        dao.replaceNotification("n1", listOf(item("a", 100)))
+        dao.replaceNotification("n2", listOf(item("f", 200, conversation = "family", notification = "n2")))
+        dao.replaceNotification("t1", listOf(item("t", 300, conversation = "family", notification = "t1", source = telegram)))
+        dao.hide(hidden("family", "Family", at = 400))
+        assertEquals(listOf("a"), dao.observeItems(whatsapp).first().map { it.item.key })
+        assertEquals(listOf("t"), unread(telegram)) // the same key in another app stays
+        assertEquals(listOf("f"), dao.observeConversation(whatsapp, "family").first().map { it.item.key }) // its window still opens
+        dao.showAgain(whatsapp, "family")
+        assertEquals(listOf("f", "a"), unread())
+    }
+
+    @Test fun aConversationIsOldestFirstWithYoursAndRemovedOnes() = runTest {
+        dao.replaceNotification("n1", listOf(item("a", 100), item("me", 150, self = true)))
+        dao.markRemoved("n1", now = 300) // reads alex up to 150
+        dao.replaceNotification("n2", listOf(item("b", 200, notification = "n2")))
+        dao.replaceNotification("n3", listOf(item("s", 120, conversation = "sam", notification = "n3")))
+        val chat = dao.observeConversation(whatsapp, "alex").first()
+        assertEquals(listOf("a", "me", "b"), chat.map { it.item.key })
+        assertEquals(listOf(false, false, true), chat.map { it.unread })
+        assertEquals(300L, chat.first().item.removedAt)
+    }
+
+    @Test fun hiddenChatsAreNewestFirstAndHidingAgainRenamesThem() = runTest {
+        dao.hide(hidden("alex", "Alex", at = 100))
+        dao.hide(hidden("family", "Family", at = 200))
+        dao.hide(hidden("family", "Family", at = 50, source = telegram))
+        assertEquals(listOf("Family", "Alex"), dao.observeHidden(whatsapp).first().map { it.name })
+        dao.hide(hidden("alex", "Alex B", at = 300))
+        assertEquals(listOf("Alex B", "Family"), dao.observeHidden(whatsapp).first().map { it.name })
     }
 }

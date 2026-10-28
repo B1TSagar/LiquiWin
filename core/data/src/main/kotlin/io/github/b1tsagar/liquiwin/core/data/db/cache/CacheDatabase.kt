@@ -6,11 +6,14 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-/** Data that can be rebuilt: the cached app list, launch times and notifications. Auto Backup leaves `cache.db` out. */
+/** Data that can be rebuilt: the cached app list, launch times, notifications and hidden chats. Auto Backup leaves `cache.db` out. */
 @Database(
-    entities = [AppEntryEntity::class, AppLaunchEntity::class, NotificationItemEntity::class, ConversationReadEntity::class],
-    version = 2,
-    autoMigrations = [AutoMigration(from = 1, to = 2)],
+    entities = [
+        AppEntryEntity::class, AppLaunchEntity::class, NotificationItemEntity::class, ConversationReadEntity::class,
+        HiddenConversationEntity::class,
+    ],
+    version = 3,
+    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3)],
 )
 abstract class CacheDatabase : RoomDatabase() {
     abstract fun appDao(): AppDao

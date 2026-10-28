@@ -17,17 +17,41 @@ data class StoredItem(@Embedded val item: NotificationItemEntity, val unread: Bo
  */
 @Dao
 abstract class NotificationDao {
-    /** Newest first, then by key. */
+    /** Newest first, then by key, leaving out hidden chats. */
     @Query(
         """
         SELECT i.*, (i.is_self = 0 AND i.posted_at > COALESCE(r.last_read_at, 0)) AS unread
         FROM notification_item i
         LEFT JOIN conversation_read r ON r.source_id = i.source_id AND r.conversation_key = i.conversation_key
         WHERE i.source_id = :sourceId
+            AND NOT EXISTS (SELECT 1 FROM hidden_conversation h WHERE h.source_id = i.source_id AND h.conversation_key = i.conversation_key)
         ORDER BY i.posted_at DESC, i.`key`
         """,
     )
     abstract fun observeItems(sourceId: String): Flow<List<StoredItem>>
+
+    /** Oldest first, with your own, removed and hidden messages. */
+    @Query(
+        """
+        SELECT i.*, (i.is_self = 0 AND i.posted_at > COALESCE(r.last_read_at, 0)) AS unread
+        FROM notification_item i
+        LEFT JOIN conversation_read r ON r.source_id = i.source_id AND r.conversation_key = i.conversation_key
+        WHERE i.source_id = :sourceId AND i.conversation_key = :conversationKey
+        ORDER BY i.posted_at, i.`key`
+        """,
+    )
+    abstract fun observeConversation(sourceId: String, conversationKey: String): Flow<List<StoredItem>>
+
+    /** Newest hidden first. */
+    @Query("SELECT * FROM hidden_conversation WHERE source_id = :sourceId ORDER BY hidden_at DESC, conversation_key")
+    abstract fun observeHidden(sourceId: String): Flow<List<HiddenConversationEntity>>
+
+    /** Hiding a hidden chat again updates its name and time. */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract suspend fun hide(chat: HiddenConversationEntity)
+
+    @Query("DELETE FROM hidden_conversation WHERE source_id = :sourceId AND conversation_key = :conversationKey")
+    abstract suspend fun showAgain(sourceId: String, conversationKey: String)
 
     @Query("SELECT `key` FROM notification_item WHERE `key` IN (:keys)")
     abstract suspend fun existingKeys(keys: List<String>): List<String>
@@ -74,7 +98,10 @@ abstract class NotificationDao {
     )
     abstract suspend fun markRead(sourceId: String, conversationKey: String, upTo: Long)
 
-    /** Deletes items older than [cutoff], then all but the newest [perSource] of each source. Returns their image files. */
+    /**
+     * Deletes items older than [cutoff], then all but the newest [perSource] of each source. Returns their image files.
+     * Hidden chats stay hidden: they're kept until shown again.
+     */
     @Transaction
     open suspend fun cleanUp(cutoff: Long, perSource: Int): List<String> {
         val deleted = itemsBefore(cutoff).toMutableList()

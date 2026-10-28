@@ -1,0 +1,251 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 3,
+    "identityHash": "2f8f3523a379ee2005bfb32da4491747",
+    "entities": [
+      {
+        "tableName": "app_entry",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`app_key` TEXT NOT NULL, `label` TEXT NOT NULL, `first_install_time` INTEGER NOT NULL, `is_work` INTEGER NOT NULL, `version_token` TEXT NOT NULL, PRIMARY KEY(`app_key`))",
+        "fields": [
+          {
+            "fieldPath": "appKey",
+            "columnName": "app_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "label",
+            "columnName": "label",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "firstInstallTime",
+            "columnName": "first_install_time",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isWork",
+            "columnName": "is_work",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "versionToken",
+            "columnName": "version_token",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "app_key"
+          ]
+        }
+      },
+      {
+        "tableName": "app_launch",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`app_key` TEXT NOT NULL, `last_launched_at` INTEGER NOT NULL, PRIMARY KEY(`app_key`))",
+        "fields": [
+          {
+            "fieldPath": "appKey",
+            "columnName": "app_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastLaunchedAt",
+            "columnName": "last_launched_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "app_key"
+          ]
+        }
+      },
+      {
+        "tableName": "notification_item",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`key` TEXT NOT NULL, `notification_key` TEXT NOT NULL, `source_id` TEXT NOT NULL, `conversation_key` TEXT NOT NULL, `conversation_title` TEXT, `shortcut_id` TEXT, `sender` TEXT NOT NULL, `text` TEXT, `avatar_file` TEXT, `image_file` TEXT, `posted_at` INTEGER NOT NULL, `removed_at` INTEGER, `is_self` INTEGER NOT NULL, PRIMARY KEY(`key`))",
+        "fields": [
+          {
+            "fieldPath": "key",
+            "columnName": "key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notificationKey",
+            "columnName": "notification_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceId",
+            "columnName": "source_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conversationKey",
+            "columnName": "conversation_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conversationTitle",
+            "columnName": "conversation_title",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "shortcutId",
+            "columnName": "shortcut_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sender",
+            "columnName": "sender",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "text",
+            "columnName": "text",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "avatarFile",
+            "columnName": "avatar_file",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "imageFile",
+            "columnName": "image_file",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "postedAt",
+            "columnName": "posted_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "removedAt",
+            "columnName": "removed_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isSelf",
+            "columnName": "is_self",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "key"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_notification_item_source_id",
+            "unique": false,
+            "columnNames": [
+              "source_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_notification_item_source_id` ON `${TABLE_NAME}` (`source_id`)"
+          },
+          {
+            "name": "index_notification_item_notification_key",
+            "unique": false,
+            "columnNames": [
+              "notification_key"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_notification_item_notification_key` ON `${TABLE_NAME}` (`notification_key`)"
+          }
+        ]
+      },
+      {
+        "tableName": "conversation_read",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`source_id` TEXT NOT NULL, `conversation_key` TEXT NOT NULL, `last_read_at` INTEGER NOT NULL, PRIMARY KEY(`source_id`, `conversation_key`))",
+        "fields": [
+          {
+            "fieldPath": "sourceId",
+            "columnName": "source_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conversationKey",
+            "columnName": "conversation_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastReadAt",
+            "columnName": "last_read_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "source_id",
+            "conversation_key"
+          ]
+        }
+      },
+      {
+        "tableName": "hidden_conversation",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`source_id` TEXT NOT NULL, `conversation_key` TEXT NOT NULL, `name` TEXT NOT NULL, `hidden_at` INTEGER NOT NULL, PRIMARY KEY(`source_id`, `conversation_key`))",
+        "fields": [
+          {
+            "fieldPath": "sourceId",
+            "columnName": "source_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conversationKey",
+            "columnName": "conversation_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hiddenAt",
+            "columnName": "hidden_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "source_id",
+            "conversation_key"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '2f8f3523a379ee2005bfb32da4491747')"
+    ]
+  }
+}
