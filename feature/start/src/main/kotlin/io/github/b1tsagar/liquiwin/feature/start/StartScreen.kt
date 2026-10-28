@@ -71,7 +71,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.b1tsagar.liquiwin.core.data.apps.AppIcon
@@ -100,8 +99,8 @@ private const val EMPTY_HINT = "swipe left for your apps. long-press one and cho
  * The start screen: the tile grid with edit mode. Outside edit mode a tap turnstiles the tiles away and then opens the
  * tile's app, and a long-press enters edit mode and lets the finger drag the tile straight away. In edit mode a tap
  * selects a tile, the selected tile moves with a drag, and any other tile moves after a long-press, so a swipe on it
- * still scrolls. When [shown] turns false the tiles turnstile away; when it turns true, or LiquiWin comes back after a
- * launch, they swing back in.
+ * still scrolls. When [shown] turns false the tiles turnstile away and then [onHidden] is called. The tiles come back by
+ * playing their exit backwards, once start is shown again and LiquiWin is [onScreen], fully back from another app.
  */
 @Composable
 fun StartScreen(
@@ -110,6 +109,8 @@ fun StartScreen(
     scrollState: ScrollState,
     modifier: Modifier = Modifier,
     shown: Boolean = true,
+    onScreen: Boolean = true,
+    onHidden: () -> Unit = {},
     banner: @Composable () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -125,19 +126,24 @@ fun StartScreen(
     val haptic = LocalHapticFeedback.current
     SideEffect { controller.update(haptic, sidePx, stepPx, state.gridWidth) }
 
-    // One clock turns every tile. A tap's tile goes last, and its app opens once the others have gone.
+    // One clock turns every tile. Going away they turnstile out, a tapped tile last, and its app opens once the others
+    // have gone; they come back by rewinding that, so the tapped tile turns back first.
     val flip = remember { TurnstileClock() }
     var tapped by remember { mutableStateOf<Long?>(null) }
     fun lastTurn(tapped: Long?) = startTurnstileOrder(state.tiles.associate { it.id to it.cell }, tapped).values.maxOrNull() ?: 0
     LaunchedEffect(shown) {
+        if (shown) return@LaunchedEffect
         tapped = null
-        if (!shown) flip.play(Turnstile.OUT, lastTurn(null))
-        else if (flip.motion == Turnstile.OUT) flip.play(Turnstile.BACK_IN, lastTurn(null))
+        if (flip.motion != Turnstile.OUT) flip.play(Turnstile.OUT, lastTurn(null))
+        onHidden()
+    }
+    LaunchedEffect(shown, onScreen) {
+        if (shown && onScreen && flip.motion == Turnstile.OUT) {
+            flip.rewind(Turnstile.OUT, lastTurn(tapped))
+            tapped = null
+        }
     }
     val scope = rememberCoroutineScope()
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        if (shown && flip.motion == Turnstile.OUT && !flip.isPlaying) scope.launch { flip.play(Turnstile.BACK_IN, lastTurn(null)) }
-    }
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val launching = remember { JobRef() }
@@ -149,7 +155,10 @@ fun StartScreen(
                 viewModel.open(id, bounds, ActivityOptions.makeCustomAnimation(context, android.R.anim.fade_in, 0).toBundle())
                 // A launch that fails leaves LiquiWin on screen, so nothing would bring the tiles back: they come back here.
                 val left = withTimeoutOrNull(1_500) { lifecycle.currentStateFlow.first { !it.isAtLeast(Lifecycle.State.RESUMED) } }
-                if (left == null) flip.play(Turnstile.BACK_IN, lastTurn(null))
+                if (left == null) {
+                    flip.rewind(Turnstile.OUT, lastTurn(tapped))
+                    tapped = null
+                }
             }
         }
     }

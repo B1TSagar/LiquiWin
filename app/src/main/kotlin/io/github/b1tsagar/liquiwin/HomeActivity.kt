@@ -26,6 +26,7 @@ class HomeActivity : ComponentActivity() {
     private val liquiWin get() = application as LiquiWinApp
     private val graph get() = liquiWin.graph
     private val homePresses = MutableSharedFlow<HomePress>(extraBufferCapacity = 1)
+    private val windowEntered = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     // The banner re-checks the role on resume, so the result itself isn't needed.
     private val setHome = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {}
@@ -61,7 +62,13 @@ class HomeActivity : ComponentActivity() {
             onSetHome = { setHome.launch(graph.homeRole.requestIntent() ?: graph.homeRole.settingsIntent()) },
             onOpenHomeSettings = { startActivity(graph.homeRole.settingsIntent()) },
         )
-        setContent { LiquiWinTheme { HomeRoot(deps, homePresses) } }
+        setContent { LiquiWinTheme { HomeRoot(deps, homePresses, windowEntered = windowEntered) } }
+    }
+
+    // Android has finished animating this window in, as when LiquiWin comes back after another app.
+    override fun onEnterAnimationComplete() {
+        super.onEnterAnimationComplete()
+        windowEntered.tryEmit(Unit)
     }
 
     override fun onNewIntent(intent: Intent) {

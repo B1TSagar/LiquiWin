@@ -254,7 +254,7 @@ The status bar's "hidden until tapped" option hides Android's status bar on the 
 - **Arrangements.** Each grid width keeps its own arrangement in `tile_placement`. The first time a width is shown, tiles flow in the order of the most recently used width: row by row, top-left first, each placed in the first space it fits. Once the user edits at that width, the positions are saved.
 - **Compaction.** After every edit, tiles float upward until blocked, keeping their columns. This closes vertical holes. Holes at the end of a row next to wider tiles may stay, as on Windows Phone. The exception is a tile that shrinks: at every width, the tiles after it re-flow from its row, so they fill the space it frees, even across columns. (The owner's call at stage 1's Galaxy check: floating up alone left tiles stacked down one edge.)
 - **Size.** Size belongs to the tile, not to one width. Growing a tile at one width leaves the other widths' positions where they still fit. Tiles that now collide are re-flowed from the first collision onward. Shrinking re-flows as under Compaction.
-- **Scrolling.** The start screen is one vertical scroll. The app list is a page to the right, reached by swipe, by the WP7 arrow, or both.
+- **Scrolling.** The start screen is one vertical scroll. The app list is a page to the right, reached by swipe, by the WP7 arrow, or both. The pages don't slide: a swipe that covers a fifth of the screen, or a flick, turnstiles the screen being left away in place, then the other turns in; going back plays both backwards. (The owner's call after stage 1.)
 
 ### 4.3 Edit mode
 
@@ -296,7 +296,7 @@ LiquiWin uses the single-colour glyph from the adaptive icon's monochrome layer 
 | Motion | Used for |
 |---|---|
 | Tilt | Pressing any tile or list item tilts it toward the finger in 3D and depresses it slightly; it springs back on release |
-| Turnstile | Launching an app from Start: tiles swing away around the left edge column by column with a staggered "feather", the tapped tile last, then the app opens with a fade. Coming back home, they swing back in. The app list's rows do the same, top to bottom, when an app opens from the list; start's tiles also swing away when a swipe lets go toward the app list, and back when one lets go toward start. (Built after stage 1, ahead of stage 3, at the owner's request.) With app launch animation set to "zoom from tile", Android's own launch animation grows the app out of the tile's bounds instead (`ActivityOptions.makeScaleUpAnimation`). |
+| Turnstile | Launching an app from Start: tiles swing away around the left edge column by column with a staggered "feather", the tapped tile last, then the app opens with a fade where Android allows one. Coming back, the tiles play that exit backwards, the tapped tile first, once Android's own closing animation has finished. The app list's rows do the same, top to bottom, when an app opens from the list. Between start and the app list, the screen being left turnstiles away in place before the other turns in (§4.2). (Built after stage 1, ahead of stage 3, at the owner's request.) With app launch animation set to "zoom from tile", Android's own launch animation grows the app out of the tile's bounds instead (`ActivityOptions.makeScaleUpAnimation`). |
 | Glass morphs | Every layout change while the material is glass (§4.8) |
 | Continuum | Going from a list item into its page (for example a hub row title flying into the next page's header) |
 | Slide / turnstile | Moving between settings and other pages |

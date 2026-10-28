@@ -1,10 +1,15 @@
 package io.github.b1tsagar.liquiwin.home
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
@@ -46,10 +51,15 @@ class HomeRootTest { // Review Focus 5
         compose.setContent { LiquiWinTheme { HomeRoot(deps, presses) } }
     }
 
-    // The app list groups its apps off the main thread; a tile has no text, so a text match is an app list row.
     private fun swipeToAppList(row: String = "Maps") {
         compose.onRoot().performTouchInput { swipeLeft() }
-        compose.waitUntil(5_000) { compose.onAllNodesWithText(row).fetchSemanticsNodes().isNotEmpty() }
+        waitForAppList(row)
+    }
+
+    // The app list groups its apps off the main thread, and the list sits off screen until start has turnstiled away.
+    // A tile has no text, so a text match is an app list row.
+    private fun waitForAppList(row: String) = compose.waitUntil(5_000) {
+        compose.onAllNodesWithText(row).fetchSemanticsNodes().isNotEmpty() && compose.onNodeWithText(row).isDisplayed()
     }
 
     private fun press(press: HomePress) {
@@ -103,6 +113,31 @@ class HomeRootTest { // Review Focus 5
         compose.onNodeWithText("pin to start").performClick()
         compose.onRoot().performTouchInput { swipeRight() }
         compose.onNode(hasContentDescription("Maps")).assertExists()
+    }
+
+    // Start turnstiles away in place once a swipe lets go; until then nothing moves.
+    @Test fun aSwipeHeldPartWayLeavesStartWhereItIs() {
+        show(pinned = listOf(camera))
+        val before = compose.onNodeWithTag("tile-1").getBoundsInRoot().left
+        compose.onRoot().performTouchInput { down(center); moveBy(Offset(-width / 3f, 0f)) }
+        assertEquals(before, compose.onNodeWithTag("tile-1").getBoundsInRoot().left)
+    }
+
+    @Test fun aSwipeWhileRearrangingStaysOnStart() {
+        show(pinned = listOf(camera))
+        compose.onNodeWithTag("tile-1").performTouchInput { longClick() }
+        compose.onRoot().performTouchInput { swipeLeft() }
+        compose.waitForIdle()
+        compose.onNodeWithTag("tile-1").assertIsDisplayed()
+        compose.onNodeWithContentDescription("done").assertExists()
+    }
+
+    // With no page to scroll, TalkBack reaches the app list through an action.
+    @Test fun theAppListActionOpensTheList() {
+        show()
+        val actions = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.CustomActions)).fetchSemanticsNode()
+        compose.runOnUiThread { actions.config[SemanticsActions.CustomActions].single { it.label == "app list" }.action() }
+        waitForAppList("Maps")
     }
 
     @Test fun theBannerShowsOnlyWhenNotTheHomeApp() {

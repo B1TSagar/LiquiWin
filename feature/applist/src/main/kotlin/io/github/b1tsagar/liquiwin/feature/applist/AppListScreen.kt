@@ -43,7 +43,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.b1tsagar.liquiwin.core.data.apps.AppIcon
@@ -74,8 +73,9 @@ private class CoordinatesRef {
 
 /**
  * The WP8.1-style A–Z app list: a search box, then sections under lowercase headers. A header opens the letter grid,
- * and a long-press on an app opens its context menu. A new [resetKey] closes both. While [shown] is false the list's
- * items are hidden; when it turns true, the items on screen feather in from the top.
+ * and a long-press on an app opens its context menu. A new [resetKey] closes both. When [shown] turns true the items on
+ * screen feather in from the top; when it turns false they play that backwards and then [onHidden] is called. Back from
+ * an app, they wait until LiquiWin is [onScreen] before turning back in.
  */
 @Composable
 fun AppListScreen(
@@ -85,6 +85,8 @@ fun AppListScreen(
     resetKey: Int,
     modifier: Modifier = Modifier,
     shown: Boolean = true,
+    onScreen: Boolean = true,
+    onHidden: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val units = LocalWpUnits.current
@@ -99,23 +101,34 @@ fun AppListScreen(
     val screen = remember { CoordinatesRef() }
 
     // One clock turns every item on screen, counted from the first visible one; items off screen just appear. The list
-    // turnstiles in when it's shown, away before an app opens (the tapped row last), and back when LiquiWin returns.
+    // turnstiles in when it's shown and plays that backwards when it goes; it turnstiles away before an app opens (the
+    // tapped row last) and rewinds that when LiquiWin is fully back on screen.
     val flip = remember { TurnstileClock(hiddenFor = if (shown) null else Turnstile.IN) }
     var flipFirst by remember { mutableIntStateOf(0) }
     var flipOnScreen by remember { mutableIntStateOf(0) }
     var tappedItem by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(shown) {
-        if (!shown) {
-            flip.hideFor(Turnstile.IN)
-        } else if (flip.motion == Turnstile.IN && !flip.isPlaying) {
+        if (shown) return@LaunchedEffect
+        if (flip.motion == null) {
             flipFirst = listState.firstVisibleItemIndex
-            flip.play(Turnstile.IN, listState.layoutInfo.visibleItemsInfo.size - 1)
+            flip.rewind(Turnstile.IN, listState.layoutInfo.visibleItemsInfo.size - 1)
+        } else {
+            flip.hideFor(Turnstile.IN) // already gone after a launch, or not in yet
         }
+        onHidden()
     }
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        if (shown && flip.motion == Turnstile.OUT && !flip.isPlaying) scope.launch {
-            flipFirst = listState.firstVisibleItemIndex
-            flip.play(Turnstile.BACK_IN, listState.layoutInfo.visibleItemsInfo.size - 1)
+    LaunchedEffect(shown, onScreen) {
+        if (!shown || !onScreen) return@LaunchedEffect
+        when (flip.motion) {
+            Turnstile.IN -> {
+                flipFirst = listState.firstVisibleItemIndex
+                flip.play(Turnstile.IN, listState.layoutInfo.visibleItemsInfo.size - 1)
+            }
+            Turnstile.OUT -> {
+                flip.rewind(Turnstile.OUT, flipOnScreen)
+                tappedItem = null
+            }
+            else -> Unit
         }
     }
     val context = LocalContext.current
@@ -131,7 +144,10 @@ fun AppListScreen(
             viewModel.open(app, bounds, ActivityOptions.makeCustomAnimation(context, android.R.anim.fade_in, 0).toBundle())
             // A launch that fails leaves LiquiWin on screen, so nothing would bring the rows back: they come back here.
             val left = withTimeoutOrNull(1_500) { lifecycle.currentStateFlow.first { !it.isAtLeast(Lifecycle.State.RESUMED) } }
-            if (left == null) flip.play(Turnstile.BACK_IN, flipOnScreen - 1)
+            if (left == null) {
+                flip.rewind(Turnstile.OUT, flipOnScreen)
+                tappedItem = null
+            }
         }
     }
     val slideStep = with(LocalDensity.current) { units.dp(50f).toPx() } // WP's slide-in: 50 px further out per line

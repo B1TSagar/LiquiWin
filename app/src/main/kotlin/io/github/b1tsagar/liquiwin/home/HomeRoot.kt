@@ -2,7 +2,7 @@ package io.github.b1tsagar.liquiwin.home
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
@@ -17,11 +17,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusTarget
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -37,7 +42,10 @@ import io.github.b1tsagar.liquiwin.feature.search.SearchScreen
 import io.github.b1tsagar.liquiwin.feature.search.SearchViewModel
 import io.github.b1tsagar.liquiwin.feature.start.StartScreen
 import io.github.b1tsagar.liquiwin.feature.start.StartViewModel
+import kotlin.math.abs
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 
 class HomeDependencies(
@@ -51,11 +59,13 @@ class HomeDependencies(
 enum class HomePress { FROM_APP, WHILE_ON_HOME }
 
 /**
- * The home screen: the start screen and the app list side by side, with search over both. A Home press closes
- * whatever is open and shows the start screen; pressed while already home, it also scrolls the start screen up.
+ * The home screen: the start screen and the app list, with search over both. A swipe, Back or a Home press changes
+ * between them in place: the one leaving turnstiles away, then the other turns in. A Home press closes whatever is open
+ * and shows the start screen; pressed while already home, it also scrolls the start screen up. [windowEntered] says when
+ * Android has finished animating LiquiWin back on screen.
  */
 @Composable
-fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Modifier = Modifier) {
+fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Modifier = Modifier, windowEntered: Flow<Unit> = emptyFlow()) {
     val start = viewModel { StartViewModel(deps.tileStore, deps.catalog, StyleFacets.Wp81Basic.gridUnits) }
     val appList = viewModel { AppListViewModel(deps.catalog, start.pinnedApps, start::pin) }
     val search = viewModel { SearchViewModel(listOf(AppSearchProvider(deps.catalog)), SearchOpener(deps.catalog)) }
@@ -66,16 +76,30 @@ fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Mod
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var resetKey by remember { mutableIntStateOf(0) }
     var isDefaultHome by remember { mutableStateOf(deps.isDefaultHome()) }
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { isDefaultHome = deps.isDefaultHome() }
 
-    val dragging = pager.interactionSource.collectIsDraggedAsState()
-    var rowsShown by remember { mutableStateOf(false) }
+    // Whether LiquiWin is fully on screen: not once another app covers it, and again when Android's animation bringing it
+    // back has finished, or 0.7 s after it resumes on a phone that never says. Flips that bring a screen back wait for it.
+    var onScreen by remember { mutableStateOf(true) }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { onScreen = false }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        isDefaultHome = deps.isDefaultHome()
+        if (!onScreen) scope.launch { delay(700); onScreen = true }
+    }
+    LaunchedEffect(windowEntered) { windowEntered.collect { onScreen = true } }
+
+    // Each change of screen waits for the leaving screen to report it has gone.
     var tilesShown by remember { mutableStateOf(true) }
-    LaunchedEffect(pager) {
-        snapshotFlow { Triple(dragging.value, pager.targetPage, pager.settledPage) }.collect { (held, target, settled) ->
-            rowsShown = appListShown(rowsShown, held, target, settled)
-            tilesShown = startShown(tilesShown, held, target)
-        }
+    var rowsShown by remember { mutableStateOf(false) }
+    var moving by remember { mutableStateOf(false) }
+    fun toList() {
+        if (moving || pager.currentPage != 0 || start.state.value.edit != null) return
+        moving = true
+        tilesShown = false
+    }
+    fun toStart() {
+        if (moving || pager.currentPage != 1) return
+        moving = true
+        rowsShown = false
     }
 
     // Holds focus during a Home press. Focus left in the pager, or restored there when search closes, would bring the
@@ -87,23 +111,67 @@ fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Mod
             searchOpen = false
             start.exitEdit()
             resetKey++
-            pager.scrollToPage(0)
-            if (press == HomePress.WHILE_ON_HOME) startScroll.animateScrollTo(0)
+            if (press == HomePress.WHILE_ON_HOME && pager.currentPage == 1) {
+                toStart()
+                startScroll.scrollTo(0)
+            } else {
+                // From another app, straight to start; its tiles come back once LiquiWin is fully on screen.
+                moving = false
+                pager.scrollToPage(0)
+                rowsShown = false
+                tilesShown = true
+                if (press == HomePress.WHILE_ON_HOME) startScroll.animateScrollTo(0)
+            }
         }
     }
 
     // Registered first, so screens' own handlers (edit mode, menus, search) win. On the start screen Back does nothing.
     BackHandler {}
-    BackHandler(enabled = pager.currentPage == 1) { scope.launch { pager.animateScrollToPage(0) } }
+    BackHandler(enabled = pager.currentPage == 1) { toStart() }
 
     Box(modifier.fillMaxSize().background(LocalLiquiWinColors.current.background).focusRequester(homeFocus).focusTarget()) {
-        HorizontalPager(state = pager, modifier = Modifier.fillMaxSize(), beyondViewportPageCount = 1) { page ->
+        HorizontalPager(
+            state = pager,
+            userScrollEnabled = false,
+            beyondViewportPageCount = 1,
+            modifier = Modifier
+                .fillMaxSize()
+                .semantics {
+                    customActions = listOf(
+                        if (pager.currentPage == 0) CustomAccessibilityAction("app list") { toList(); true }
+                        else CustomAccessibilityAction("start") { toStart(); true },
+                    )
+                }
+                .pointerInput(Unit) {
+                    val fling = 600.dp.toPx()
+                    val tracker = VelocityTracker()
+                    var drag = 0f
+                    detectHorizontalDragGestures(
+                        onDragStart = { tracker.resetTracking(); drag = 0f },
+                        onDragEnd = {
+                            when (swipeTarget(pager.currentPage, drag, tracker.calculateVelocity().x, size.width.toFloat(), fling)) {
+                                1 -> toList()
+                                0 -> toStart()
+                            }
+                        },
+                    ) { change, amount ->
+                        tracker.addPosition(change.uptimeMillis, change.position)
+                        drag += amount
+                        change.consume()
+                    }
+                },
+        ) { page ->
             if (page == 0) {
-                StartScreen(start, icon, startScroll, shown = tilesShown, banner = {
-                    if (!isDefaultHome) HomeAppBanner(onSet = deps.onSetHome, onSettings = deps.onOpenHomeSettings)
-                })
+                StartScreen(
+                    start, icon, startScroll, shown = tilesShown, onScreen = onScreen,
+                    onHidden = { scope.launch { pager.scrollToPage(1); rowsShown = true; moving = false } },
+                    banner = { if (!isDefaultHome) HomeAppBanner(onSet = deps.onSetHome, onSettings = deps.onOpenHomeSettings) },
+                )
             } else {
-                AppListScreen(appList, icon, onSearch = { searchOpen = true }, resetKey = resetKey, shown = rowsShown)
+                AppListScreen(
+                    appList, icon, onSearch = { searchOpen = true }, resetKey = resetKey, shown = rowsShown, onScreen = onScreen,
+                    onHidden = { scope.launch { pager.scrollToPage(0); tilesShown = true; moving = false } },
+                )
             }
         }
         if (searchOpen) {
@@ -114,14 +182,18 @@ fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Mod
 }
 
 /**
- * Whether the app list's rows are in. They come in when a swipe lets go heading for the app list (page 1), or the pager
- * gets there another way, and go out once start (page 0) has settled. A drag on the list that springs back changes nothing.
+ * The page a horizontal swipe on [page] goes to: start (0) sits left of the app list (1). A flick at [fling] or faster
+ * counts whatever its length; a slower swipe must cover a fifth of the [width]. Toward the edge, it goes nowhere.
  */
-internal fun appListShown(shown: Boolean, dragging: Boolean, targetPage: Int, settledPage: Int): Boolean = when {
-    !dragging && targetPage == 1 -> true
-    settledPage == 0 && targetPage == 0 -> false
-    else -> shown
+internal fun swipeTarget(page: Int, drag: Float, velocity: Float, width: Float, fling: Float): Int? {
+    val leftward = when {
+        abs(velocity) >= fling -> velocity < 0
+        abs(drag) >= width / 5 -> drag < 0
+        else -> return null
+    }
+    return when {
+        page == 0 && leftward -> 1
+        page == 1 && !leftward -> 0
+        else -> null
+    }
 }
-
-/** Whether start's tiles are in: they follow wherever a swipe lets go, and stay as they are while one is held. */
-internal fun startShown(shown: Boolean, dragging: Boolean, targetPage: Int): Boolean = if (dragging) shown else targetPage == 0

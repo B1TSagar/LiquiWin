@@ -70,6 +70,24 @@ class TurnstileClock(hiddenFor: Turnstile? = null) {
         }
     }
 
+    /**
+     * Plays [motion] backwards from the moment item [last] is done, so the last item turns back first. The items end
+     * where the motion starts: at rest after rewinding [Turnstile.OUT], hidden for the next one after an in-motion.
+     */
+    suspend fun rewind(motion: Turnstile, last: Int) {
+        val end = motion.totalMs(last)
+        clock.snapTo(end.toFloat())
+        this.motion = motion
+        done = false
+        isPlaying = true
+        try {
+            clock.animateTo(0f, tween(end, easing = LinearEasing))
+            if (motion == Turnstile.OUT) this.motion = null
+        } finally {
+            isPlaying = false
+        }
+    }
+
     /** Hides the items until [motion], an in-motion, plays. */
     suspend fun hideFor(motion: Turnstile) {
         clock.snapTo(0f)
