@@ -42,6 +42,8 @@ import io.github.b1tsagar.liquiwin.core.tiles.TileStore
 import io.github.b1tsagar.liquiwin.core.tiles.source.SourceRegistry
 import io.github.b1tsagar.liquiwin.feature.applist.AppListScreen
 import io.github.b1tsagar.liquiwin.feature.applist.AppListViewModel
+import io.github.b1tsagar.liquiwin.feature.hub.ChatViewModel
+import io.github.b1tsagar.liquiwin.feature.hub.ChatWindow
 import io.github.b1tsagar.liquiwin.feature.notifications.LiveTilesHealth
 import io.github.b1tsagar.liquiwin.feature.notifications.LiveTilesStatus
 import io.github.b1tsagar.liquiwin.feature.search.AppSearchProvider
@@ -76,13 +78,15 @@ enum class HomePress { FROM_APP, WHILE_ON_HOME }
  * between them in place: the one leaving turnstiles away, then the other turns in. A Home press closes whatever is open
  * and shows the start screen; pressed while already home, it also scrolls the start screen up. [windowEntered] says when
  * Android has finished animating LiquiWin back on screen. A banner on start says when live tiles are paused or keep
- * stopping, and the second opens a guide to keeping them awake.
+ * stopping, and the second opens a guide to keeping them awake. A tile's chat button opens the chat window over it all.
  */
 @Composable
 fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Modifier = Modifier, windowEntered: Flow<Unit> = emptyFlow()) {
     val start = viewModel { StartViewModel(deps.tileStore, deps.catalog, StyleFacets.Wp81Basic.gridUnits, deps.sources) }
     val appList = viewModel { AppListViewModel(deps.catalog, start.pinnedApps, start::pin) }
     val search = viewModel { SearchViewModel(listOf(AppSearchProvider(deps.catalog)), SearchOpener(deps.catalog)) }
+    val chat = viewModel { ChatViewModel(deps.sources) }
+    val chatOpen = chat.window.collectAsStateWithLifecycle().value != null
     val icon = remember(deps.catalog) { deps.catalog::icon }
     val pager = rememberPagerState(pageCount = { 2 })
     val startScroll = rememberScrollState()
@@ -131,6 +135,7 @@ fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Mod
             homeFocus.requestFocus()
             searchOpen = false
             guideOpen = false
+            chat.close()
             start.exitEdit()
             resetKey++
             if (press == HomePress.WHILE_ON_HOME && pager.currentPage == 1) {
@@ -164,8 +169,8 @@ fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Mod
             beyondViewportPageCount = 1,
             modifier = Modifier
                 .fillMaxSize()
-                // The guide covers the whole pager, so TalkBack mustn't find the tiles beneath it.
-                .then(if (guideOpen) Modifier.clearAndSetSemantics {} else Modifier)
+                // The guide and the chat window cover the pager, so TalkBack mustn't find the tiles beneath them.
+                .then(if (guideOpen || chatOpen) Modifier.clearAndSetSemantics {} else Modifier)
                 .semantics {
                     customActions = listOf(
                         if (pager.currentPage == 0) CustomAccessibilityAction("app list") { toList(); true }
@@ -201,6 +206,7 @@ fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Mod
                         else if (liveTiles.keepsStopping) LiveTilesBanner("live tiles keep stopping") { guideOpen = true }
                     },
                     liveTilesPaused = liveTiles.paused,
+                    onChat = chat::show,
                 )
             } else {
                 AppListScreen(
@@ -217,6 +223,7 @@ fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Mod
             BackHandler { guideOpen = false }
             KeepAwakeGuide(samsung = Build.MANUFACTURER.equals("samsung", ignoreCase = true), onOpenAppInfo = deps.onOpenAppInfo)
         }
+        ChatWindow(chat, deps.catalog)
     }
 }
 

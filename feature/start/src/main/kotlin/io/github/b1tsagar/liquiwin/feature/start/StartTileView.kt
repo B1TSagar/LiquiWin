@@ -1,6 +1,5 @@
 package io.github.b1tsagar.liquiwin.feature.start
 
-import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -12,13 +11,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -29,6 +25,7 @@ import io.github.b1tsagar.liquiwin.core.data.apps.AppIcon
 import io.github.b1tsagar.liquiwin.core.data.apps.LauncherApp
 import io.github.b1tsagar.liquiwin.core.design.components.IconImage
 import io.github.b1tsagar.liquiwin.core.design.components.WpText
+import io.github.b1tsagar.liquiwin.core.design.components.rememberImage
 import io.github.b1tsagar.liquiwin.core.design.icons.LiquiWinIcons
 import io.github.b1tsagar.liquiwin.core.design.theme.LocalLiquiWinColors
 import io.github.b1tsagar.liquiwin.core.design.theme.LocalLiquiWinType
@@ -38,8 +35,6 @@ import io.github.b1tsagar.liquiwin.core.tiles.source.ImageRef
 import io.github.b1tsagar.liquiwin.core.tiles.source.TileItem
 import io.github.b1tsagar.liquiwin.feature.start.live.STACK_SIZE
 import io.github.b1tsagar.liquiwin.feature.start.live.TileFace
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /**
  * One tile as drawn, showing [face]. The front is the accent square with the app's icon, the label on medium and larger
@@ -65,7 +60,7 @@ internal fun StartTileView(
     Box(modifier.size(size).background(LocalLiquiWinColors.current.accent)) {
         if (face == TileFace.Front) IconImage(appIcon?.bitmap, min(size.width, size.height) * 0.5f, Modifier.align(Alignment.Center))
         if (photo != null) {
-            val image = rememberImage(photo)
+            val image = rememberImage(photo.file)
             if (image != null) {
                 Image(image, contentDescription = null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
                 Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.2f)))
@@ -149,7 +144,7 @@ private fun ItemRow(item: TileItem, avatarWpPx: Float, lines: Int, modifier: Mod
 @Composable
 private fun Avatar(ref: ImageRef?, size: Dp) {
     if (ref == null) return
-    val image = rememberImage(ref)
+    val image = rememberImage(ref.file)
     Box(Modifier.padding(end = LocalWpUnits.current.dp(8f)).size(size)) {
         if (image != null) Image(image, contentDescription = null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
     }
@@ -159,14 +154,4 @@ private fun Avatar(ref: ImageRef?, size: Dp) {
 private fun TileText(text: String, maxLines: Int, modifier: Modifier = Modifier, sender: Boolean = false) {
     val style = LocalLiquiWinType.current.tileLabel
     WpText(text, if (sender) style.copy(fontWeight = FontWeight.SemiBold) else style, modifier, Color.White, maxLines)
-}
-
-// Null while it decodes, and for a file that's gone or won't decode. Keyed by the file, so a new item never shows the
-// last one's image.
-@Composable
-private fun rememberImage(ref: ImageRef): ImageBitmap? {
-    val image by key(ref.file) {
-        produceState<ImageBitmap?>(null) { value = withContext(Dispatchers.IO) { BitmapFactory.decodeFile(ref.file.path) }?.asImageBitmap() }
-    }
-    return image
 }

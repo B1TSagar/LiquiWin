@@ -34,9 +34,12 @@ enum class Turnstile(val fromDeg: Float, val toDeg: Float, val durationMs: Int, 
 /** How far item [index] has turned through [motion], [elapsedMs] in: 0 before its turn, 1 once done. */
 fun turnstileProgress(motion: Turnstile, elapsedMs: Float, index: Int): Float {
     val t = ((elapsedMs - index * motion.staggerMs) / motion.durationMs).coerceIn(0f, 1f)
-    // WP's ExponentialEase, exponent 6
-    return if (motion.easesIn) (exp(6 * t) - 1) / (exp(6f) - 1) else (1 - exp(-6 * t)) / (1 - exp(-6f))
+    return exponentialEase(t, exponent = 6f, motion.easesIn)
 }
+
+/** WP's ExponentialEase of [t], from 0 to 1: easing in starts slowly, easing out ends slowly. */
+fun exponentialEase(t: Float, exponent: Float, easesIn: Boolean): Float =
+    if (easesIn) (exp(exponent * t) - 1) / (exp(exponent) - 1) else (1 - exp(-exponent * t)) / (1 - exp(-exponent))
 
 /**
  * One clock for the turnstile motions of a screen's items. The items rest while [motion] is null, wait hidden for an

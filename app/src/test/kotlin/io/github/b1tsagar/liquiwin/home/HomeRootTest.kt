@@ -1,12 +1,14 @@
 package io.github.b1tsagar.liquiwin.home
 
 import android.content.Context
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
@@ -28,10 +30,15 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.b1tsagar.liquiwin.core.data.apps.LauncherApp
 import io.github.b1tsagar.liquiwin.core.design.theme.LiquiWinTheme
 import io.github.b1tsagar.liquiwin.core.testing.FakeAppCatalog
+import io.github.b1tsagar.liquiwin.core.testing.FakeTileSource
 import io.github.b1tsagar.liquiwin.core.testing.FakeTileStore
 import io.github.b1tsagar.liquiwin.core.testing.MainDispatcherRule
 import io.github.b1tsagar.liquiwin.core.testing.appTile
 import io.github.b1tsagar.liquiwin.core.testing.testApp
+import io.github.b1tsagar.liquiwin.core.testing.testChat
+import io.github.b1tsagar.liquiwin.core.testing.testMessage
+import io.github.b1tsagar.liquiwin.core.tiles.model.SourceId
+import io.github.b1tsagar.liquiwin.core.tiles.source.SourceRegistry
 import io.github.b1tsagar.liquiwin.feature.notifications.DisconnectLog
 import io.github.b1tsagar.liquiwin.feature.notifications.LiveTilesHealth
 import kotlinx.coroutines.CoroutineScope
@@ -62,11 +69,12 @@ class HomeRootTest { // Review Focus 5
         pinned: List<LauncherApp> = emptyList(),
         isDefaultHome: Boolean = true,
         liveTiles: LiveTilesHealth? = null,
+        sources: SourceRegistry = SourceRegistry { null },
     ) {
         store.seed(tiles = pinned.mapIndexed { i, app -> appTile(i + 1L, app.key) }, placements = emptyMap())
         val deps = HomeDependencies(
             store, FakeAppCatalog(apps = apps), { isDefaultHome }, onSetHome = { setHomeCalls++ }, onOpenHomeSettings = {},
-            liveTiles = liveTiles, onFixLiveTiles = { fixCalls++ }, onOpenAppInfo = { appInfoCalls++ },
+            sources = sources, liveTiles = liveTiles, onFixLiveTiles = { fixCalls++ }, onOpenAppInfo = { appInfoCalls++ },
         )
         compose.setContent { LiquiWinTheme { HomeRoot(deps, presses) } }
     }
@@ -183,5 +191,21 @@ class HomeRootTest { // Review Focus 5
         compose.onNodeWithText("keep tiles awake").assertExists()
         compose.onNodeWithText("open app info").performClick()
         assertEquals(1, appInfoCalls)
+    }
+
+    // Review Focus 5
+    @Test fun theChatButtonOpensTheWindowAndHomeClosesIt() {
+        Settings.Global.putFloat(compose.activity.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 0f) // the item shows at once
+        val chats = FakeTileSource(SourceId.forApp(camera.key.packageName, 0))
+        val a = testMessage("a", source = chats.id)
+        chats.itemState.value = listOf(a.item)
+        chats.chatState.value = testChat(a)
+        show(pinned = listOf(camera), sources = SourceRegistry { if (it == chats.id) chats else null })
+        compose.onNodeWithTag("tile-1").performTouchInput { click(Offset(width - 5f, height - 5f)) }
+        compose.onNodeWithText("see you at 6").assertIsDisplayed() // a tile has no text, so this is the window
+        compose.onNodeWithTag("tile-1").assertDoesNotExist() // hidden from TalkBack under the window
+        press(HomePress.FROM_APP)
+        compose.onNodeWithText("see you at 6").assertDoesNotExist()
+        compose.onNodeWithTag("tile-1").assertExists()
     }
 }
