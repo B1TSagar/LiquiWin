@@ -26,5 +26,6 @@ include(
     ":feature:applist",
     ":feature:search",
     ":feature:notifications",
+    ":feature:hub",
     ":tools:notifier",
 )
