@@ -62,6 +62,14 @@ class NotificationDaoTest {
         assertEquals(listOf("a-edited"), unread())
     }
 
+    // Apps clear a chat's notification once it's read, then post under the same key; the window keeps the history (§5.7).
+    @Test fun aClearedNotificationsMessagesStayWhenItsAppPostsAgain() = runTest {
+        dao.replaceNotification("n1", listOf(item("a", 100), item("b", 200)))
+        dao.markRemoved("n1", now = 300)
+        dao.replaceNotification("n1", listOf(item("c", 400)))
+        assertEquals(listOf("a", "b", "c"), dao.observeConversation(whatsapp, "alex").first().map { it.item.key })
+    }
+
     @Test fun removingANotificationReadsItsItemsButNotLaterOnes() = runTest {
         dao.replaceNotification("n1", listOf(item("a", 100), item("b", 200)))
         dao.markRemoved("n1", now = 300)

@@ -59,11 +59,16 @@ abstract class NotificationDao {
     @Query("SELECT * FROM notification_item WHERE `key` = :key")
     abstract suspend fun item(key: String): NotificationItemEntity?
 
-    /** Stores a notification's items. Returns the image files of items its last post had and this one hasn't. */
+    /**
+     * Stores a notification's items. Returns the image files of items its last post showed and this one hasn't, which
+     * were edited or withdrawn. Items of a post already removed stay, as the chat's history (§5.7).
+     */
     @Transaction
     open suspend fun replaceNotification(notificationKey: String, items: List<NotificationItemEntity>): List<String> {
         val keys = items.mapTo(HashSet()) { it.key }
-        val gone = itemsOf(notificationKey).filter { it.key !in keys }
+        // shortcut: a message an app trims from a notification still showing goes too, as an edit would; telling them
+        // apart needs the store to know a chat's messages from a plain notification's text.
+        val gone = showingItemsOf(notificationKey).filter { it.key !in keys }
         delete(gone)
         val stored = existingKeys(items.map { it.key }).toSet()
         insert(items.filter { it.key !in stored })
@@ -119,9 +124,6 @@ abstract class NotificationDao {
         """,
     )
     abstract suspend fun allFiles(): List<String>
-
-    @Query("SELECT * FROM notification_item WHERE notification_key = :notificationKey")
-    protected abstract suspend fun itemsOf(notificationKey: String): List<NotificationItemEntity>
 
     @Query("SELECT * FROM notification_item WHERE notification_key = :notificationKey AND removed_at IS NULL")
     protected abstract suspend fun showingItemsOf(notificationKey: String): List<NotificationItemEntity>
