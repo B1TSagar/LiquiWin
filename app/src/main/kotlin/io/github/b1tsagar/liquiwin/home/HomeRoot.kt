@@ -1,5 +1,6 @@
 package io.github.b1tsagar.liquiwin.home
 
+import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -26,11 +27,13 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.b1tsagar.liquiwin.core.data.apps.AppCatalog
 import io.github.b1tsagar.liquiwin.core.design.style.StyleFacets
@@ -39,6 +42,8 @@ import io.github.b1tsagar.liquiwin.core.tiles.TileStore
 import io.github.b1tsagar.liquiwin.core.tiles.source.SourceRegistry
 import io.github.b1tsagar.liquiwin.feature.applist.AppListScreen
 import io.github.b1tsagar.liquiwin.feature.applist.AppListViewModel
+import io.github.b1tsagar.liquiwin.feature.notifications.LiveTilesHealth
+import io.github.b1tsagar.liquiwin.feature.notifications.LiveTilesStatus
 import io.github.b1tsagar.liquiwin.feature.search.AppSearchProvider
 import io.github.b1tsagar.liquiwin.feature.search.SearchOpener
 import io.github.b1tsagar.liquiwin.feature.search.SearchScreen
@@ -48,6 +53,7 @@ import io.github.b1tsagar.liquiwin.feature.start.StartViewModel
 import kotlin.math.abs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 
@@ -58,6 +64,9 @@ class HomeDependencies(
     val onSetHome: () -> Unit,
     val onOpenHomeSettings: () -> Unit,
     val sources: SourceRegistry = SourceRegistry { null },
+    val liveTiles: LiveTilesHealth? = null,
+    val onFixLiveTiles: () -> Unit = {},
+    val onOpenAppInfo: () -> Unit = {},
 )
 
 enum class HomePress { FROM_APP, WHILE_ON_HOME }
@@ -66,7 +75,8 @@ enum class HomePress { FROM_APP, WHILE_ON_HOME }
  * The home screen: the start screen and the app list, with search over both. A swipe, Back or a Home press changes
  * between them in place: the one leaving turnstiles away, then the other turns in. A Home press closes whatever is open
  * and shows the start screen; pressed while already home, it also scrolls the start screen up. [windowEntered] says when
- * Android has finished animating LiquiWin back on screen.
+ * Android has finished animating LiquiWin back on screen. A banner on start says when live tiles are paused or keep
+ * stopping, and the second opens a guide to keeping them awake.
  */
 @Composable
 fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Modifier = Modifier, windowEntered: Flow<Unit> = emptyFlow()) {
@@ -78,8 +88,10 @@ fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Mod
     val startScroll = rememberScrollState()
     val scope = rememberCoroutineScope()
     var searchOpen by rememberSaveable { mutableStateOf(false) }
+    var guideOpen by rememberSaveable { mutableStateOf(false) }
     var resetKey by remember { mutableIntStateOf(0) }
     var isDefaultHome by remember { mutableStateOf(deps.isDefaultHome()) }
+    val liveTiles by remember(deps) { deps.liveTiles?.status ?: MutableStateFlow(LiveTilesStatus()) }.collectAsStateWithLifecycle()
 
     // Whether LiquiWin is fully on screen: not while another app covers it, until Android's animation bringing it back has
     // finished (or 0.7 s after it resumes, on a phone that never says), and not while One UI's close-to-home animation
@@ -90,6 +102,7 @@ fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Mod
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { covered = true }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         isDefaultHome = deps.isDefaultHome()
+        deps.liveTiles?.onResume()
         if (covered) scope.launch { delay(700); covered = false }
     }
     LaunchedEffect(windowEntered) { windowEntered.collect { covered = false } }
@@ -117,6 +130,7 @@ fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Mod
         homePresses.collect { press ->
             homeFocus.requestFocus()
             searchOpen = false
+            guideOpen = false
             start.exitEdit()
             resetKey++
             if (press == HomePress.WHILE_ON_HOME && pager.currentPage == 1) {
@@ -150,6 +164,8 @@ fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Mod
             beyondViewportPageCount = 1,
             modifier = Modifier
                 .fillMaxSize()
+                // The guide covers the whole pager, so TalkBack mustn't find the tiles beneath it.
+                .then(if (guideOpen) Modifier.clearAndSetSemantics {} else Modifier)
                 .semantics {
                     customActions = listOf(
                         if (pager.currentPage == 0) CustomAccessibilityAction("app list") { toList(); true }
@@ -179,7 +195,12 @@ fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Mod
                 StartScreen(
                     start, icon, startScroll, shown = tilesShown, onScreen = onScreen,
                     onHidden = { scope.launch { pager.scrollToPage(1); rowsShown = true; moving = false } },
-                    banner = { if (!isDefaultHome) HomeAppBanner(onSet = deps.onSetHome, onSettings = deps.onOpenHomeSettings) },
+                    banner = {
+                        if (!isDefaultHome) HomeAppBanner(onSet = deps.onSetHome, onSettings = deps.onOpenHomeSettings)
+                        if (liveTiles.paused) LiveTilesBanner("live tiles paused", deps.onFixLiveTiles)
+                        else if (liveTiles.keepsStopping) LiveTilesBanner("live tiles keep stopping") { guideOpen = true }
+                    },
+                    liveTilesPaused = liveTiles.paused,
                 )
             } else {
                 AppListScreen(
@@ -191,6 +212,10 @@ fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Mod
         if (searchOpen) {
             BackHandler { searchOpen = false }
             SearchScreen(search, icon, onOpened = { searchOpen = false })
+        }
+        if (guideOpen) {
+            BackHandler { guideOpen = false }
+            KeepAwakeGuide(samsung = Build.MANUFACTURER.equals("samsung", ignoreCase = true), onOpenAppInfo = deps.onOpenAppInfo)
         }
     }
 }

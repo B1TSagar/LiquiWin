@@ -1,5 +1,6 @@
 package io.github.b1tsagar.liquiwin.home
 
+import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
@@ -22,6 +23,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.swipeUp
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.b1tsagar.liquiwin.core.data.apps.LauncherApp
 import io.github.b1tsagar.liquiwin.core.design.theme.LiquiWinTheme
@@ -30,7 +32,12 @@ import io.github.b1tsagar.liquiwin.core.testing.FakeTileStore
 import io.github.b1tsagar.liquiwin.core.testing.MainDispatcherRule
 import io.github.b1tsagar.liquiwin.core.testing.appTile
 import io.github.b1tsagar.liquiwin.core.testing.testApp
+import io.github.b1tsagar.liquiwin.feature.notifications.DisconnectLog
+import io.github.b1tsagar.liquiwin.feature.notifications.LiveTilesHealth
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -44,10 +51,23 @@ class HomeRootTest { // Review Focus 5
     private val store = FakeTileStore()
     private val presses = MutableSharedFlow<HomePress>(extraBufferCapacity = 1)
     private var setHomeCalls = 0
+    private var fixCalls = 0
+    private var appInfoCalls = 0
+    private val prefs get() = ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("listener_health", Context.MODE_PRIVATE)
+    private fun health(granted: Boolean, log: DisconnectLog = DisconnectLog(prefs)) =
+        LiveTilesHealth({ granted }, MutableStateFlow(true), {}, log, { false }, CoroutineScope(Dispatchers.Main))
 
-    private fun show(apps: List<LauncherApp> = listOf(camera, maps, mail), pinned: List<LauncherApp> = emptyList(), isDefaultHome: Boolean = true) {
+    private fun show(
+        apps: List<LauncherApp> = listOf(camera, maps, mail),
+        pinned: List<LauncherApp> = emptyList(),
+        isDefaultHome: Boolean = true,
+        liveTiles: LiveTilesHealth? = null,
+    ) {
         store.seed(tiles = pinned.mapIndexed { i, app -> appTile(i + 1L, app.key) }, placements = emptyMap())
-        val deps = HomeDependencies(store, FakeAppCatalog(apps = apps), { isDefaultHome }, onSetHome = { setHomeCalls++ }, onOpenHomeSettings = {})
+        val deps = HomeDependencies(
+            store, FakeAppCatalog(apps = apps), { isDefaultHome }, onSetHome = { setHomeCalls++ }, onOpenHomeSettings = {},
+            liveTiles = liveTiles, onFixLiveTiles = { fixCalls++ }, onOpenAppInfo = { appInfoCalls++ },
+        )
         compose.setContent { LiquiWinTheme { HomeRoot(deps, presses) } }
     }
 
@@ -145,5 +165,23 @@ class HomeRootTest { // Review Focus 5
         compose.onNodeWithText("liquiwin isn't your home app yet").assertExists()
         compose.onNodeWithText("set").performClick()
         assertEquals(1, setHomeCalls)
+    }
+
+    // Review Focus 4
+    @Test fun thePausedBannersFixOpensNotificationAccess() {
+        show(liveTiles = health(granted = false))
+        compose.onNodeWithText("live tiles paused · fix").performClick()
+        assertEquals(1, fixCalls)
+    }
+
+    @Test fun theKeepStoppingBannerOpensTheGuide() {
+        var clock = 0L
+        val log = DisconnectLog(prefs) { clock }
+        repeat(3) { log.record(); clock += 61_000 }
+        show(liveTiles = health(granted = true, log))
+        compose.onNodeWithText("live tiles keep stopping · fix").performClick()
+        compose.onNodeWithText("keep tiles awake").assertExists()
+        compose.onNodeWithText("open app info").performClick()
+        assertEquals(1, appInfoCalls)
     }
 }

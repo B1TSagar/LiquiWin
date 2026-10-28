@@ -8,6 +8,7 @@ import android.os.StrictMode
 import android.os.SystemClock
 import io.github.b1tsagar.liquiwin.crash.CrashGuard
 import io.github.b1tsagar.liquiwin.crash.PrefsCrashStore
+import io.github.b1tsagar.liquiwin.feature.notifications.LiveTilesHealth
 import io.github.b1tsagar.liquiwin.feature.notifications.NotificationIntake
 import io.github.b1tsagar.liquiwin.feature.notifications.NotificationsHost
 
@@ -20,6 +21,9 @@ class LiquiWinApp : Application(), NotificationsHost {
 
     override val notificationIntake: NotificationIntake?
         get() = if (crashGuard.shouldStartInSafeMode()) null else graph.notificationIntake
+
+    override val liveTilesHealth: LiveTilesHealth?
+        get() = if (crashGuard.shouldStartInSafeMode()) null else graph.liveTilesHealth
 
     override fun onCreate() {
         // The guard comes first, so a crash anywhere after this counts.

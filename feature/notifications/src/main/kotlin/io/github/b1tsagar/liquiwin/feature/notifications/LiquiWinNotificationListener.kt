@@ -34,6 +34,7 @@ open class LiquiWinNotificationListener : NotificationListenerService() { // ope
     override fun onListenerDisconnected() {
         if (intake == null) return
         ListenerConnection.set(false)
+        (application as? NotificationsHost)?.liveTilesHealth?.onDisconnected()
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {

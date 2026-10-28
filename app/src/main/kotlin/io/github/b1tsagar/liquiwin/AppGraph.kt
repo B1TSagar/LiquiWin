@@ -1,6 +1,7 @@
 package io.github.b1tsagar.liquiwin
 
 import android.content.Context
+import android.os.PowerManager
 import android.os.UserManager
 import io.github.b1tsagar.liquiwin.core.data.apps.AppCatalog
 import io.github.b1tsagar.liquiwin.core.data.apps.AppRepository
@@ -13,8 +14,12 @@ import io.github.b1tsagar.liquiwin.core.tiles.TileStore
 import io.github.b1tsagar.liquiwin.core.tiles.source.SourceRegistry
 import io.github.b1tsagar.liquiwin.feature.notifications.AndroidItemLauncher
 import io.github.b1tsagar.liquiwin.feature.notifications.AppNotificationSource
+import io.github.b1tsagar.liquiwin.feature.notifications.DisconnectLog
 import io.github.b1tsagar.liquiwin.feature.notifications.ImageStore
+import io.github.b1tsagar.liquiwin.feature.notifications.ListenerConnection
 import io.github.b1tsagar.liquiwin.feature.notifications.LiveActionCache
+import io.github.b1tsagar.liquiwin.feature.notifications.LiveTilesHealth
+import io.github.b1tsagar.liquiwin.feature.notifications.NotificationAccess
 import io.github.b1tsagar.liquiwin.feature.notifications.NotificationIntake
 import io.github.b1tsagar.liquiwin.feature.notifications.Normaliser
 import io.github.b1tsagar.liquiwin.home.HomeRole
@@ -60,6 +65,20 @@ class AppGraph(context: Context) {
                 }
             }
         }
+    }
+
+    val notificationAccess = NotificationAccess(app)
+
+    val liveTilesHealth: LiveTilesHealth by lazy {
+        val power = app.getSystemService(PowerManager::class.java)
+        LiveTilesHealth(
+            notificationAccess::isGranted,
+            ListenerConnection.connected,
+            notificationAccess::requestRebind,
+            DisconnectLog(app.getSharedPreferences("listener_health", Context.MODE_PRIVATE)),
+            { power.isIgnoringBatteryOptimizations(app.packageName) }, // true when LiquiWin's battery use is Unrestricted
+            io,
+        )
     }
 
     val sources = SourceRegistry { id ->

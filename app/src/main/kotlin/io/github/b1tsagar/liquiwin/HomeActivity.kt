@@ -2,7 +2,9 @@ package io.github.b1tsagar.liquiwin
 
 import android.content.Intent
 import android.graphics.Color
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -62,6 +64,9 @@ class HomeActivity : ComponentActivity() {
             onSetHome = { setHome.launch(graph.homeRole.requestIntent() ?: graph.homeRole.settingsIntent()) },
             onOpenHomeSettings = { startActivity(graph.homeRole.settingsIntent()) },
             sources = graph.sources,
+            liveTiles = graph.liveTilesHealth,
+            onFixLiveTiles = { graph.notificationAccess.openSettings(this) },
+            onOpenAppInfo = { startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null))) },
         )
         setContent { LiquiWinTheme { HomeRoot(deps, homePresses, windowEntered = windowEntered) } }
     }
