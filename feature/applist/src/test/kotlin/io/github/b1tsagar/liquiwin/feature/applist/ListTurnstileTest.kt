@@ -5,9 +5,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ListTurnstileTest {
-    @Test fun rowsGoTopToBottomFromTheFirstOnScreen() {
-        assertEquals(0, listTurnstileIndex(Turnstile.OUT, item = 7, first = 7, tapped = null, onScreen = 10))
-        assertEquals(3, listTurnstileIndex(Turnstile.OUT, item = 10, first = 7, tapped = null, onScreen = 10))
+    @Test fun rowsGoTopToBottomFromTheFirstOnScreenAfterTheSearchBox() {
+        assertEquals(1, listTurnstileIndex(Turnstile.OUT, item = 7, first = 7, tapped = null, onScreen = 10))
+        assertEquals(4, listTurnstileIndex(Turnstile.OUT, item = 10, first = 7, tapped = null, onScreen = 10))
     }
 
     @Test fun goingOutTheTappedRowGoesLast() {
@@ -15,6 +15,6 @@ class ListTurnstileTest {
     }
 
     @Test fun comingBackTheTappedRowKeepsItsPlace() {
-        assertEquals(1, listTurnstileIndex(Turnstile.BACK_IN, item = 8, first = 7, tapped = 8, onScreen = 10))
+        assertEquals(2, listTurnstileIndex(Turnstile.BACK_IN, item = 8, first = 7, tapped = 8, onScreen = 10))
     }
 }

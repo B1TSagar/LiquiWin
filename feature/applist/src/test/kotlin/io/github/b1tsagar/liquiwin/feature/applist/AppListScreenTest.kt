@@ -4,6 +4,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
@@ -32,13 +33,14 @@ class AppListScreenTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val camera = testApp("Camera"); private val maps = testApp("Maps")
     private val pinned = mutableListOf<AppKey>()
+    private var searches = 0
     private lateinit var catalog: FakeAppCatalog
 
     // Grouping runs off the main thread, so wait for the first app to show.
     private fun show(apps: List<LauncherApp> = listOf(camera, maps), pinnedApps: Flow<Set<AppKey>> = flowOf(emptySet())) {
         catalog = FakeAppCatalog(apps = apps)
         val viewModel = AppListViewModel(catalog, pinnedApps, { pinned += it })
-        compose.setContent { LiquiWinTheme { AppListScreen(viewModel, { null }, onSearch = {}, resetKey = 0) } }
+        compose.setContent { LiquiWinTheme { AppListScreen(viewModel, { null }, onSearch = { searches++ }, resetKey = 0) } }
         compose.waitUntil(5_000) { compose.onAllNodesWithText(apps.first().label).fetchSemanticsNodes().isNotEmpty() }
     }
 
@@ -62,6 +64,29 @@ class AppListScreenTest {
         compose.onNodeWithTag("header-c").performClick()
         compose.onNodeWithTag("letter-w").performClick()
         compose.onNodeWithText("Wapp22").assertIsDisplayed()
+    }
+
+    @Test fun searchStaysOnScreenWhileTheListScrolls() {
+        show((0 until 40).map { testApp("${'A' + it % 26}app$it") })
+        compose.onNodeWithTag("header-c").performClick()
+        compose.onNodeWithTag("letter-w").performClick()
+        compose.onNodeWithText("Wapp22").assertIsDisplayed()
+        compose.onNodeWithText("search apps").assertIsDisplayed().performClick()
+        assertEquals(1, searches)
+    }
+
+    // A scrub replays the rows' feather-in below the search box, which stays still.
+    @Test fun scrubbingLeavesTheSearchBoxStill() {
+        show((0 until 40).map { testApp("${'A' + it % 26}app$it") })
+        val atRest = compose.onNodeWithText("search apps").getBoundsInRoot()
+        compose.mainClock.autoAdvance = false
+        compose.onRoot().performTouchInput {
+            val x = right - 8.dp.toPx()
+            down(Offset(x, centerY))
+            moveBy(Offset(0f, 40.dp.toPx()))
+        }
+        compose.mainClock.advanceTimeBy(50)
+        assertEquals(atRest, compose.onNodeWithText("search apps").getBoundsInRoot())
     }
 
     @Test fun draggingDownTheRightEdgeJumpsToALaterLetter() {

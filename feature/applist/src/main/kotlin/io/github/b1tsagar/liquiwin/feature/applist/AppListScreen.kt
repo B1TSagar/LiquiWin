@@ -72,10 +72,11 @@ private class CoordinatesRef {
 }
 
 /**
- * The WP8.1-style A–Z app list: a search box, then sections under lowercase headers. A header opens the letter grid,
- * and a long-press on an app opens its context menu. A new [resetKey] closes both. When [shown] turns true the items on
- * screen feather in from the top; when it turns false they play that backwards and then [onHidden] is called. Back from
- * an app, they wait until LiquiWin is [onScreen] before turning back in.
+ * The WP8.1-style A–Z app list: sections under lowercase headers, below a search box that stays on screen as they
+ * scroll. A header opens the letter grid, and a long-press on an app opens its context menu. A new [resetKey] closes
+ * both. When [shown] turns true the items on screen feather in from the top; when it turns false they play that
+ * backwards and then [onHidden] is called. Back from an app, they wait until LiquiWin is [onScreen] before turning
+ * back in.
  */
 @Composable
 fun AppListScreen(
@@ -100,18 +101,21 @@ fun AppListScreen(
     }
     val screen = remember { CoordinatesRef() }
 
-    // One clock turns every item on screen, counted from the first visible one; items off screen just appear. The list
-    // turnstiles in when it's shown and plays that backwards when it goes; it turnstiles away before an app opens (the
-    // tapped row last) and rewinds that when LiquiWin is fully back on screen.
+    // One clock turns the search box and then every item on screen, counted from the first visible one; items off screen
+    // just appear. The list turnstiles in when it's shown and plays that backwards when it goes; it turnstiles away
+    // before an app opens (the tapped row last) and rewinds that when LiquiWin is fully back on screen.
     val flip = remember { TurnstileClock(hiddenFor = if (shown) null else Turnstile.IN) }
     var flipFirst by remember { mutableIntStateOf(0) }
     var flipOnScreen by remember { mutableIntStateOf(0) }
     var tappedItem by remember { mutableStateOf<Int?>(null) }
+    var scrubbing by remember { mutableStateOf(false) } // a scrub replays the rows only: the search box stays still
+    fun itemsOnScreen() = listState.layoutInfo.visibleItemsInfo.size + 1 // the list's, and the search box above them
     LaunchedEffect(shown) {
         if (shown) return@LaunchedEffect
+        scrubbing = false
         if (flip.motion == null) {
             flipFirst = listState.firstVisibleItemIndex
-            flip.rewind(Turnstile.IN, listState.layoutInfo.visibleItemsInfo.size - 1)
+            flip.rewind(Turnstile.IN, itemsOnScreen() - 1)
         } else {
             flip.hideFor(Turnstile.IN) // already gone after a launch, or not in yet
         }
@@ -119,10 +123,11 @@ fun AppListScreen(
     }
     LaunchedEffect(shown, onScreen) {
         if (!shown || !onScreen) return@LaunchedEffect
+        scrubbing = false
         when (flip.motion) {
             Turnstile.IN -> {
                 flipFirst = listState.firstVisibleItemIndex
-                flip.play(Turnstile.IN, listState.layoutInfo.visibleItemsInfo.size - 1)
+                flip.play(Turnstile.IN, itemsOnScreen() - 1)
             }
             Turnstile.OUT -> {
                 flip.rewind(Turnstile.OUT, flipOnScreen)
@@ -137,8 +142,9 @@ fun AppListScreen(
     fun open(item: Int, app: LauncherApp, bounds: android.graphics.Rect?) {
         if (launching.value?.isActive == true) return
         launching.value = scope.launch {
+            scrubbing = false
             flipFirst = listState.firstVisibleItemIndex
-            flipOnScreen = listState.layoutInfo.visibleItemsInfo.size
+            flipOnScreen = itemsOnScreen()
             tappedItem = item
             flip.play(Turnstile.OUT, flipOnScreen)
             viewModel.open(app, bounds, ActivityOptions.makeCustomAnimation(context, android.R.anim.fade_in, 0).toBundle())
@@ -156,9 +162,9 @@ fun AppListScreen(
         return turnstile(flip, index, slideStep * index)
     }
 
-    // The list index of each section's header; item 0 is the search box.
+    // The list index of each section's header.
     val headerItems = remember(state.index) {
-        var item = 1
+        var item = 0
         state.index.sections.associate { section -> (section.label to item).also { item += 1 + section.apps.size } }
     }
     val labels = remember(state.index) { state.index.sections.map { it.label } }
@@ -169,7 +175,8 @@ fun AppListScreen(
             scope.launch {
                 listState.scrollToItem(header)
                 flipFirst = header
-                flip.play(Turnstile.IN, listState.layoutInfo.visibleItemsInfo.size - 1)
+                scrubbing = true
+                flip.play(Turnstile.IN, itemsOnScreen() - 1)
             }
         }
     }
@@ -178,41 +185,49 @@ fun AppListScreen(
     val dim = if (menu != null) 0.4f else 1f
 
     LetterScrubber(labels, enabled = menu == null && !letterGridOpen, onLetter = scrubTo, modifier = modifier.fillMaxSize().onPlaced { screen.value = it }) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = side,
-                end = side,
-                top = bars.calculateTopPadding() + units.dp(12f),
-                bottom = bars.calculateBottomPadding() + units.dp(12f),
-            ),
-            verticalArrangement = Arrangement.spacedBy(units.dp(12f)),
-        ) {
-            item(key = "search") { SearchBox(onSearch, Modifier.turning(0).alpha(dim)) }
-            // Counted here, from the sections being built: headerItems can be a composition behind the list.
-            var next = 1
-            for (section in state.index.sections) {
-                val header = next
-                next += 1 + section.apps.size
-                item(key = "header:${section.label}") {
-                    SectionHeader(section.label, Modifier.turning(header).alpha(dim)) { letterGridOpen = true }
-                }
-                itemsIndexed(section.apps, key = { _, app -> app.key.flatten() }) { i, app ->
-                    AppRow(
-                        app = app,
-                        isNew = app.key in state.newApps,
-                        icon = icon,
-                        modifier = Modifier.turning(header + 1 + i).alpha(if (menu == null || menu?.app?.key == app.key) 1f else 0.4f),
-                        onOpen = { bounds ->
-                            val window = bounds?.boundsInWindow()
-                            val rect = window?.let {
-                                android.graphics.Rect(it.left.roundToInt(), it.top.roundToInt(), it.right.roundToInt(), it.bottom.roundToInt())
-                            }
-                            open(header + 1 + i, app, rect)
-                        },
-                        onLongPress = { row -> screen.value?.let { menu = MenuAnchor(app, it.localBoundingBoxOf(row)) } },
-                    )
+        Column(Modifier.fillMaxSize()) {
+            SearchBox(
+                onSearch,
+                Modifier
+                    .padding(start = side, end = side, top = bars.calculateTopPadding() + units.dp(12f))
+                    .then(if (scrubbing) Modifier else Modifier.turnstile(flip, 0))
+                    .alpha(dim),
+            )
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(
+                    start = side,
+                    end = side,
+                    top = units.dp(12f),
+                    bottom = bars.calculateBottomPadding() + units.dp(12f),
+                ),
+                verticalArrangement = Arrangement.spacedBy(units.dp(12f)),
+            ) {
+                // Counted here, from the sections being built: headerItems can be a composition behind the list.
+                var next = 0
+                for (section in state.index.sections) {
+                    val header = next
+                    next += 1 + section.apps.size
+                    item(key = "header:${section.label}") {
+                        SectionHeader(section.label, Modifier.turning(header).alpha(dim)) { letterGridOpen = true }
+                    }
+                    itemsIndexed(section.apps, key = { _, app -> app.key.flatten() }) { i, app ->
+                        AppRow(
+                            app = app,
+                            isNew = app.key in state.newApps,
+                            icon = icon,
+                            modifier = Modifier.turning(header + 1 + i).alpha(if (menu == null || menu?.app?.key == app.key) 1f else 0.4f),
+                            onOpen = { bounds ->
+                                val window = bounds?.boundsInWindow()
+                                val rect = window?.let {
+                                    android.graphics.Rect(it.left.roundToInt(), it.top.roundToInt(), it.right.roundToInt(), it.bottom.roundToInt())
+                                }
+                                open(header + 1 + i, app, rect)
+                            },
+                            onLongPress = { row -> screen.value?.let { menu = MenuAnchor(app, it.localBoundingBoxOf(row)) } },
+                        )
+                    }
                 }
             }
         }
