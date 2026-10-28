@@ -17,6 +17,7 @@ dependencies {
     api(project(":core:design"))
     api(project(":core:data"))
 
+    testImplementation(project(":core:testing"))
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.junit)

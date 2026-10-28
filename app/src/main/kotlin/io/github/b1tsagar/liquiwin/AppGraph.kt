@@ -10,6 +10,9 @@ import io.github.b1tsagar.liquiwin.core.data.db.cache.CacheDatabase
 import io.github.b1tsagar.liquiwin.core.data.db.layout.LayoutDatabase
 import io.github.b1tsagar.liquiwin.core.tiles.RoomTileStore
 import io.github.b1tsagar.liquiwin.core.tiles.TileStore
+import io.github.b1tsagar.liquiwin.core.tiles.source.SourceRegistry
+import io.github.b1tsagar.liquiwin.feature.notifications.AndroidItemLauncher
+import io.github.b1tsagar.liquiwin.feature.notifications.AppNotificationSource
 import io.github.b1tsagar.liquiwin.feature.notifications.ImageStore
 import io.github.b1tsagar.liquiwin.feature.notifications.LiveActionCache
 import io.github.b1tsagar.liquiwin.feature.notifications.NotificationIntake
@@ -56,6 +59,12 @@ class AppGraph(context: Context) {
                     delay(1.hours)
                 }
             }
+        }
+    }
+
+    val sources = SourceRegistry { id ->
+        id.appPackageAndSerial()?.let { (packageName, serial) ->
+            AppNotificationSource(packageName, serial, cacheDb.notificationDao(), liveActions, imageStore.dir, catalog, AndroidItemLauncher(app))
         }
     }
 }
