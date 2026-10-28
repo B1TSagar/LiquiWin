@@ -22,8 +22,8 @@ open class LiquiWinNotificationListener : NotificationListenerService() { // ope
     private val intake get() = (application as? NotificationsHost)?.notificationIntake
 
     override fun onListenerConnected() {
+        ListenerConnection.set(true) // in safe mode too: leaving it keeps this process, and the health check reads this
         val intake = intake ?: return
-        ListenerConnection.set(true)
         try {
             intake.synced(activeNotifications.toList())
         } catch (e: RuntimeException) {
@@ -32,8 +32,8 @@ open class LiquiWinNotificationListener : NotificationListenerService() { // ope
     }
 
     override fun onListenerDisconnected() {
-        if (intake == null) return
         ListenerConnection.set(false)
+        if (intake == null) return
         (application as? NotificationsHost)?.liveTilesHealth?.onDisconnected()
     }
 

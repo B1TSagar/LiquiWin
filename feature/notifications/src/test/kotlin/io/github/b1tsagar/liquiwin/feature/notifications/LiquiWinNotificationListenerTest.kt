@@ -63,6 +63,15 @@ class LiquiWinNotificationListenerTest {
         listener.onListenerDisconnected()
         assertFalse(ListenerConnection.connected.value)
     }
+
+    // Review Focus 4: leaving safe mode keeps this process, so the health check later reads what was set during it.
+    @Test fun aConnectionInSafeModeIsStillTracked() {
+        host.safeMode = true
+        listener.onListenerConnected()
+        assertTrue(ListenerConnection.connected.value)
+        listener.onListenerDisconnected()
+        assertFalse(ListenerConnection.connected.value)
+    }
 }
 
 /** An app with an in-memory store. In safe mode it has no intake. */
