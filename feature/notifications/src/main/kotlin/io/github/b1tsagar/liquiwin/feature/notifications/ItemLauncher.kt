@@ -1,21 +1,28 @@
 package io.github.b1tsagar.liquiwin.feature.notifications
 
 import android.app.ActivityOptions
+import android.app.Notification
 import android.app.PendingIntent
+import android.app.RemoteInput
 import android.content.Context
+import android.content.Intent
 import android.content.pm.LauncherApps
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.UserManager
 import android.util.Log
 import android.widget.Toast
 
-/** How a source opens what an item points at. Each call says whether it worked. */
+/** How a source opens what an item points at, and replies through it. Each call says whether it worked. */
 interface ItemLauncher {
     fun send(intent: PendingIntent): Boolean
     fun startShortcut(packageName: String, shortcutId: String, userSerial: Long): Boolean
     fun appGone()
+
+    /** Fills [action]'s free-form inputs with [text] and sends it. False if it takes no text or was cancelled. */
+    fun reply(action: Notification.Action, text: String): Boolean
 }
 
 class AndroidItemLauncher(private val context: Context) : ItemLauncher {
@@ -54,6 +61,22 @@ class AndroidItemLauncher(private val context: Context) : ItemLauncher {
     override fun appGone() {
         Handler(Looper.getMainLooper()).post {
             Toast.makeText(context, "this app isn't installed any more", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // No ActivityOptions: reply actions are broadcasts or services, not activities.
+    override fun reply(action: Notification.Action, text: String): Boolean {
+        val inputs = action.remoteInputs.orEmpty().filter { it.allowFreeFormInput }.toTypedArray()
+        val pending = action.actionIntent
+        if (inputs.isEmpty() || pending == null) return false
+        val intent = Intent()
+        RemoteInput.addResultsToIntent(inputs, intent, Bundle().apply { for (input in inputs) putCharSequence(input.resultKey, text) })
+        RemoteInput.setResultsSource(intent, RemoteInput.SOURCE_FREE_FORM_INPUT)
+        return try {
+            pending.send(context, 0, intent)
+            true
+        } catch (e: PendingIntent.CanceledException) {
+            false
         }
     }
 }

@@ -31,4 +31,10 @@ class TileStateTest {
     @Test fun aTileWithNoSourcesHasAnEmptyState() = runTest {
         assertEquals(TileState(emptyList(), 0), tileState(emptyList()).first())
     }
+
+    @Test fun theHiddenChatsOfEverySourceAreCollected() = runTest {
+        a.hiddenState.value = listOf(HiddenChat(a.id, "family", "Family"))
+        b.hiddenState.value = listOf(HiddenChat(b.id, "sam", "Sam"))
+        assertEquals(listOf("Family", "Sam"), tileState(listOf(a, b)).first().hiddenChats.map { it.name })
+    }
 }

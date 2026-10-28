@@ -26,11 +26,21 @@ data class TileItem(
     val conversation: ConversationRef?,
 )
 
+sealed interface ReplyResult {
+    data object Sent : ReplyResult
+    data object ActionGone : ReplyResult // the app withdrew its reply action
+}
+
 /** Anything that feeds a tile, such as all of one app's notifications (§3.2). */
 interface TileSource {
     val id: SourceId
-    val items: Flow<List<TileItem>> // newest first
-    val unreadCount: Flow<Int>
+    val items: Flow<List<TileItem>> // newest first, without hidden chats
+    val unreadCount: Flow<Int> // without hidden chats
+    val hiddenChats: Flow<List<HiddenChat>> // newest hidden first
     suspend fun open(item: TileItem?) // null opens the app
     suspend fun markRead(items: List<TileItem>) // local read state only
+    fun chat(conversationKey: String): Flow<Chat?> // null while nothing of it is stored
+    suspend fun reply(item: TileItem, text: String): ReplyResult // §5.7
+    suspend fun hide(chat: Chat) // §5.8
+    suspend fun showAgain(conversationKey: String)
 }

@@ -12,6 +12,9 @@ import io.github.b1tsagar.liquiwin.core.data.db.cache.CacheDatabase
 import io.github.b1tsagar.liquiwin.core.data.db.cache.NotificationItemEntity
 import io.github.b1tsagar.liquiwin.core.testing.FakeAppCatalog
 import io.github.b1tsagar.liquiwin.core.testing.testApp
+import io.github.b1tsagar.liquiwin.core.tiles.source.HiddenChat
+import io.github.b1tsagar.liquiwin.core.tiles.source.ImageRef
+import io.github.b1tsagar.liquiwin.core.tiles.source.ReplyResult
 import io.github.b1tsagar.liquiwin.core.tiles.source.TileItem
 import java.io.File
 import java.time.Instant
@@ -19,6 +22,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -111,14 +116,101 @@ class AppNotificationSourceTest {
         AppNotificationSource("com.whatsapp", 10, dao, actions, folder.root, catalog, launcher).open(null)
         assertEquals(listOf(workWhatsApp.key), catalog.launched)
     }
+
+    @Test fun aChatIsItsStoredMessagesOldestFirstWithYours() = runTest {
+        dao.replaceNotification("n1", listOf(stored("a", 100), stored("me", 150).copy(sender = "You", isSelf = true), stored("b", 200)))
+        dao.replaceNotification("n2", listOf(stored("s", 120, conversation = "sam", notification = "n2")))
+        val chat = source.chat("alex").first()!!
+        assertEquals(listOf("a", "me", "b"), chat.messages.map { it.item.key })
+        assertEquals(listOf(false, true, false), chat.messages.map { it.isSelf })
+        assertEquals("Alex", chat.title)
+        assertEquals(ImageRef(File(folder.root, "b.webp")), chat.avatar) // the newest incoming message's
+        assertFalse(chat.isGroup)
+    }
+
+    @Test fun aGroupChatIsNamedAfterTheGroupWithItsSendersAndNoAvatar() = runTest {
+        dao.replaceNotification("n1", listOf(stored("m", 100, conversation = "family", group = "Family")))
+        val chat = source.chat("family").first()!!
+        assertEquals("Family", chat.title)
+        assertTrue(chat.isGroup)
+        assertNull(chat.avatar)
+        assertEquals("Mum", chat.messages.single().sender)
+    }
+
+    @Test fun aChatWithNothingStoredIsNull() = runTest {
+        assertNull(source.chat("alex").first())
+    }
+
+    @Test fun aChatOfOnlyYourMessagesIsNamedAfterTheApp() = runTest {
+        dao.replaceNotification("n1", listOf(stored("me", 100).copy(sender = "You", isSelf = true)))
+        assertEquals("WhatsApp", source.chat("alex").first()!!.title)
+    }
+
+    // Review Focus 2: after a launcher restart the cache is empty, so nothing takes replies until the app posts again
+    @Test fun aChatRepliesThroughItsNewestNotificationWithALiveReplyAction() = runTest {
+        dao.replaceNotification("n1", listOf(stored("a", 100)))
+        dao.replaceNotification("n2", listOf(stored("b", 200, notification = "n2")))
+        assertNull(source.chat("alex").first()!!.replyTo)
+        actions.put("n1", LiveActions(intent, reply))
+        assertEquals("a", source.chat("alex").first()!!.replyTo?.key)
+        actions.put("n2", LiveActions(intent, reply))
+        assertEquals("b", source.chat("alex").first()!!.replyTo?.key)
+    }
+
+    @Test fun aReplyGoesToItsItemsLiveReplyAction() = runTest {
+        dao.replaceNotification("n1", listOf(stored("a", 100)))
+        actions.put("n1", LiveActions(intent, reply))
+        assertEquals(ReplyResult.Sent, source.reply(source.chat("alex").first()!!.replyTo!!, "on my way"))
+        assertEquals(listOf(reply to "on my way"), launcher.replies)
+    }
+
+    // Review Focus 2
+    @Test fun aReplyWithoutALiveActionIsActionGone() = runTest {
+        dao.replaceNotification("n1", listOf(stored("a", 100)))
+        actions.put("n1", LiveActions(intent, reply))
+        val item = source.chat("alex").first()!!.replyTo!!
+        actions.remove("n1")
+        assertEquals(ReplyResult.ActionGone, source.reply(item, "hi"))
+        actions.put("n1", LiveActions(intent, reply))
+        dao.markRemoved("n1", now = 300)
+        assertEquals(ReplyResult.ActionGone, source.reply(item, "hi"))
+        assertEquals(emptyList<Pair<Notification.Action, String>>(), launcher.replies)
+    }
+
+    // Review Focus 2
+    @Test fun aReplyThatCantBeSentIsActionGone() = runTest {
+        dao.replaceNotification("n1", listOf(stored("a", 100)))
+        actions.put("n1", LiveActions(intent, reply))
+        launcher.replyWorks = false
+        assertEquals(ReplyResult.ActionGone, source.reply(source.chat("alex").first()!!.replyTo!!, "hi"))
+    }
+
+    // Review Focus 3 and 4
+    @Test fun hidingAChatTakesItOffTheTileAndShowingItAgainBringsItBack() = runTest {
+        val work = AppNotificationSource("com.whatsapp", 10, dao, actions, folder.root, catalog, launcher)
+        dao.replaceNotification("n1", listOf(stored("a", 100)))
+        dao.replaceNotification("n2", listOf(stored("m", 200, conversation = "family", group = "Family", notification = "n2")))
+        dao.replaceNotification("w1", listOf(stored("w", 300, conversation = "family", group = "Family", notification = "w1", serial = 10)))
+        source.hide(source.chat("family").first()!!)
+        assertEquals(listOf("a"), source.items.first().map { it.key })
+        assertEquals(1, source.unreadCount.first())
+        assertEquals(listOf(HiddenChat(source.id, "family", "Family")), source.hiddenChats.first())
+        assertEquals(listOf("w"), work.items.first().map { it.key }) // the work profile's "family" stays
+        source.showAgain("family")
+        assertEquals(listOf("m", "a"), source.items.first().map { it.key })
+        assertEquals(emptyList<HiddenChat>(), source.hiddenChats.first())
+    }
 }
 
 private class RecordingLauncher : ItemLauncher {
     var sendWorks = true
+    var replyWorks = true
     val sent = mutableListOf<PendingIntent>()
     val shortcuts = mutableListOf<Triple<String, String, Long>>()
+    val replies = mutableListOf<Pair<Notification.Action, String>>()
     var goneCount = 0
     override fun send(intent: PendingIntent) = sendWorks.also { if (it) sent += intent }
     override fun startShortcut(packageName: String, shortcutId: String, userSerial: Long) = true.also { shortcuts += Triple(packageName, shortcutId, userSerial) }
     override fun appGone() { goneCount++ }
+    override fun reply(action: Notification.Action, text: String) = replyWorks.also { if (it) replies += action to text }
 }
