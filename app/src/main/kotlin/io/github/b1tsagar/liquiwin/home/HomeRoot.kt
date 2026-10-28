@@ -2,6 +2,7 @@ package io.github.b1tsagar.liquiwin.home
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
@@ -16,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -66,6 +68,12 @@ fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Mod
     var isDefaultHome by remember { mutableStateOf(deps.isDefaultHome()) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { isDefaultHome = deps.isDefaultHome() }
 
+    val dragging = pager.interactionSource.collectIsDraggedAsState()
+    var rowsShown by remember { mutableStateOf(false) }
+    LaunchedEffect(pager) {
+        snapshotFlow { appListShown(rowsShown, dragging.value, pager.targetPage, pager.settledPage) }.collect { rowsShown = it }
+    }
+
     // Holds focus during a Home press. Focus left in the pager, or restored there when search closes, would bring the
     // app list back into view; this target sits outside the pager.
     val homeFocus = remember { FocusRequester() }
@@ -91,7 +99,7 @@ fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Mod
                     if (!isDefaultHome) HomeAppBanner(onSet = deps.onSetHome, onSettings = deps.onOpenHomeSettings)
                 })
             } else {
-                AppListScreen(appList, icon, onSearch = { searchOpen = true }, resetKey = resetKey)
+                AppListScreen(appList, icon, onSearch = { searchOpen = true }, resetKey = resetKey, shown = rowsShown)
             }
         }
         if (searchOpen) {
@@ -99,4 +107,14 @@ fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Mod
             SearchScreen(search, icon, onOpened = { searchOpen = false })
         }
     }
+}
+
+/**
+ * Whether the app list's rows are in. They come in when a swipe lets go heading for the app list (page 1), or the pager
+ * gets there another way, and go out once start (page 0) has settled. A drag on the list that springs back changes nothing.
+ */
+internal fun appListShown(shown: Boolean, dragging: Boolean, targetPage: Int, settledPage: Int): Boolean = when {
+    !dragging && targetPage == 1 -> true
+    settledPage == 0 && targetPage == 0 -> false
+    else -> shown
 }

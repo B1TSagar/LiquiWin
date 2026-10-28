@@ -1,5 +1,8 @@
 package io.github.b1tsagar.liquiwin.feature.applist
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,11 +21,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -36,6 +40,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -44,6 +49,9 @@ import io.github.b1tsagar.liquiwin.core.data.apps.LauncherApp
 import io.github.b1tsagar.liquiwin.core.design.components.IconImage
 import io.github.b1tsagar.liquiwin.core.design.components.WpText
 import io.github.b1tsagar.liquiwin.core.design.icons.LiquiWinIcons
+import io.github.b1tsagar.liquiwin.core.design.motion.FEATHER_DURATION_MS
+import io.github.b1tsagar.liquiwin.core.design.motion.FEATHER_STAGGER_MS
+import io.github.b1tsagar.liquiwin.core.design.motion.featherIn
 import io.github.b1tsagar.liquiwin.core.design.motion.tilt
 import io.github.b1tsagar.liquiwin.core.design.style.LocalStyleFacets
 import io.github.b1tsagar.liquiwin.core.design.theme.LocalLiquiWinColors
@@ -61,7 +69,8 @@ private class CoordinatesRef {
 
 /**
  * The WP8.1-style A–Z app list: a search box, then sections under lowercase headers. A header opens the letter grid,
- * and a long-press on an app opens its context menu. A new [resetKey] closes both.
+ * and a long-press on an app opens its context menu. A new [resetKey] closes both. While [shown] is false the list's
+ * items are hidden; when it turns true, the items on screen feather in from the top.
  */
 @Composable
 fun AppListScreen(
@@ -70,6 +79,7 @@ fun AppListScreen(
     onSearch: () -> Unit,
     resetKey: Int,
     modifier: Modifier = Modifier,
+    shown: Boolean = true,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val units = LocalWpUnits.current
@@ -83,16 +93,38 @@ fun AppListScreen(
     }
     val screen = remember { CoordinatesRef() }
 
+    // One clock feathers in every item on screen, counted from the first visible one; items off screen just appear.
+    val entrance = remember { Animatable(0f) }
+    var entranceDone by remember { mutableStateOf(shown) }
+    var entranceFirst by remember { mutableIntStateOf(0) }
+    LaunchedEffect(shown) {
+        if (!shown) {
+            entranceDone = false
+            entrance.snapTo(0f)
+        } else if (!entranceDone) {
+            entranceFirst = listState.firstVisibleItemIndex
+            val lastOnScreen = (listState.layoutInfo.visibleItemsInfo.size - 1).coerceAtLeast(0)
+            val end = lastOnScreen * FEATHER_STAGGER_MS + FEATHER_DURATION_MS
+            entrance.animateTo(end.toFloat(), tween(end, easing = LinearEasing))
+            entranceDone = true
+        }
+    }
+    val elapsed = { if (entranceDone) Float.POSITIVE_INFINITY else entrance.value }
+    val slideStep = with(LocalDensity.current) { units.dp(50f).toPx() } // WP's slide-in: 50 px further out per line
+    fun Modifier.entering(item: Int): Modifier = (item - entranceFirst).coerceAtLeast(0).let { featherIn(elapsed, it, slideStep * it) }
+
     // The list index of each section's header; item 0 is the search box.
     val headerItems = remember(state.index) {
         var item = 1
         state.index.sections.associate { section -> (section.label to item).also { item += 1 + section.apps.size } }
     }
+    val labels = remember(state.index) { state.index.sections.map { it.label } }
+    val jumpTo: (String) -> Unit = { label -> headerItems[label]?.let { scope.launch { listState.scrollToItem(it) } } }
     val side = units.dp(LocalStyleFacets.current.sideMarginWpPx)
     val bars = WindowInsets.systemBars.asPaddingValues()
     val dim = if (menu != null) 0.4f else 1f
 
-    Box(modifier.fillMaxSize().onPlaced { screen.value = it }) {
+    LetterScrubber(labels, enabled = menu == null && !letterGridOpen, onLetter = jumpTo, modifier = modifier.fillMaxSize().onPlaced { screen.value = it }) {
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
@@ -104,17 +136,21 @@ fun AppListScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(units.dp(12f)),
         ) {
-            item(key = "search") { SearchBox(onSearch, Modifier.alpha(dim)) }
+            item(key = "search") { SearchBox(onSearch, Modifier.entering(0).alpha(dim)) }
+            // Counted here, from the sections being built: headerItems can be a composition behind the list.
+            var next = 1
             for (section in state.index.sections) {
+                val header = next
+                next += 1 + section.apps.size
                 item(key = "header:${section.label}") {
-                    SectionHeader(section.label, Modifier.alpha(dim)) { letterGridOpen = true }
+                    SectionHeader(section.label, Modifier.entering(header).alpha(dim)) { letterGridOpen = true }
                 }
-                items(section.apps, key = { it.key.flatten() }) { app ->
+                itemsIndexed(section.apps, key = { _, app -> app.key.flatten() }) { i, app ->
                     AppRow(
                         app = app,
                         isNew = app.key in state.newApps,
                         icon = icon,
-                        modifier = Modifier.alpha(if (menu == null || menu?.app?.key == app.key) 1f else 0.4f),
+                        modifier = Modifier.entering(header + 1 + i).alpha(if (menu == null || menu?.app?.key == app.key) 1f else 0.4f),
                         onOpen = { bounds ->
                             val window = bounds?.boundsInWindow()
                             val rect = window?.let {
@@ -141,7 +177,7 @@ fun AppListScreen(
             LetterGrid(
                 letters = state.index.letters,
                 onPick = { label ->
-                    headerItems[label]?.let { scope.launch { listState.scrollToItem(it) } }
+                    jumpTo(label)
                     letterGridOpen = false
                 },
                 onDismiss = { letterGridOpen = false },

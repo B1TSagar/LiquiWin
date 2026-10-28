@@ -500,6 +500,8 @@ Opening an item marks it read.
 
 - **Letter grouping** uses ICU `AlphabeticIndex` for the phone's language. Digits and symbols go under "#", and other scripts get their own groups.
 - **Letter headers.** Tap one to open the alphabet grid, with empty letters dimmed, and tap a letter to jump to it.
+- **Opening.** When a swipe toward the app list lets go, the items on screen feather in from the top. Each swings in around a hinge 20% of its width to its left (the turnstile feather, forward in) while sliding in from the right, 50 WP px further out per line, starting 40 ms after the item above and taking 350 ms. Items stay hidden while the swipe is held, a drag on the list that springs back doesn't replay it, and Android's remove-animations setting makes it instant. (The owner's call after stage 1, ahead of stage 3's motion set.)
+- **Letter scrubber.** A drag that starts within 32 dp of the right edge and moves up or down scrubs through the letters that have apps, spread over the screen's height. Each new letter jumps the list there with a haptic tick and shows in a large accent square beside the finger. Nothing is drawn at rest, and taps and sideways swipes there still reach the rows. Windows Phone had no scrubber; it's LiquiWin's own, alongside the alphabet grid. (The owner's call after stage 1.)
 - **Long-press an app** to pin it to start, open its app info, uninstall it, or hide it. Hidden apps are managed in settings and don't appear in search.
 - **Work-profile apps** carry a badge, and are greyed out while work apps are paused.
 

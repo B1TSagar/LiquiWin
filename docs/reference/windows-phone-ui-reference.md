@@ -106,3 +106,8 @@ Checked on the Galaxy S24 (1080 × 2340 px, 411 dp wide). WP px are 1/480 of the
 - **Edit mode:** unpin at the tile's top-right corner and resize at its bottom-right, each a 32 dp white circle with an 18 dp black glyph in a 48 dp touch target. The edit bar is 72 WP px of chrome above the navigation bar, holding **done** as a 48 WP px white ring.
 - **Tilt:** the edge under the finger sinks, by up to 0.3 rad, and the depression scale is 0.025, so a press at the centre shrinks the tile by 2.5%. The tile returns 200 ms after release, linearly over 100 ms.
 - **Changed during the Galaxy check:** a tile that shrinks re-flows the tiles after it, so they fill the space it frees, even across columns (spec §4.2). Search keeps the spec's ranking: "wa" lists WhatsApp, below apps whose names start with "wa".
+
+## Values added after stage 1
+
+- **App list opening:** the turnstile feather, forward in, from section 5: each item starts 40 ms after the one above and swings in over 350 ms with exponent-6 easing, around a hinge 20% of its width to its left, from 80° with its right edge pushed back. It fades in over the first 10 ms. Each item also slides in from 50 WP px × its line on screen (the list slide-in's offset), over the same 350 ms.
+- **Letter scrubber:** a 32 dp strip along the right edge, with no drawing at rest. While scrubbing, the letter shows in the letter grid's 96 WP px accent square, 8 dp left of the strip and centred on the finger.

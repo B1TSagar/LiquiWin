@@ -1,14 +1,19 @@
 package io.github.b1tsagar.liquiwin.feature.applist
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.b1tsagar.liquiwin.core.data.apps.AppKey
 import io.github.b1tsagar.liquiwin.core.data.apps.LauncherApp
@@ -27,10 +32,12 @@ class AppListScreenTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val camera = testApp("Camera"); private val maps = testApp("Maps")
     private val pinned = mutableListOf<AppKey>()
+    private lateinit var catalog: FakeAppCatalog
 
     // Grouping runs off the main thread, so wait for the first app to show.
     private fun show(apps: List<LauncherApp> = listOf(camera, maps), pinnedApps: Flow<Set<AppKey>> = flowOf(emptySet())) {
-        val viewModel = AppListViewModel(FakeAppCatalog(apps = apps), pinnedApps, { pinned += it })
+        catalog = FakeAppCatalog(apps = apps)
+        val viewModel = AppListViewModel(catalog, pinnedApps, { pinned += it })
         compose.setContent { LiquiWinTheme { AppListScreen(viewModel, { null }, onSearch = {}, resetKey = 0) } }
         compose.waitUntil(5_000) { compose.onAllNodesWithText(apps.first().label).fetchSemanticsNodes().isNotEmpty() }
     }
@@ -55,5 +62,21 @@ class AppListScreenTest {
         compose.onNodeWithTag("header-c").performClick()
         compose.onNodeWithTag("letter-w").performClick()
         compose.onNodeWithText("Wapp22").assertIsDisplayed()
+    }
+
+    @Test fun draggingDownTheRightEdgeJumpsToALaterLetter() {
+        show((0 until 40).map { testApp("${'A' + it % 26}app$it") })
+        compose.onRoot().performTouchInput {
+            val x = right - 8.dp.toPx()
+            swipe(Offset(x, top + 10f), Offset(x, bottom - 10f), durationMillis = 600)
+        }
+        compose.onNodeWithText("Zapp25").assertIsDisplayed()
+    }
+
+    // The scrubber's strip overlaps the right end of each row; a tap there still belongs to the row.
+    @Test fun aTapOnTheRightEndOfARowStillOpensTheApp() {
+        show()
+        compose.onNodeWithText("Camera").performTouchInput { click(Offset(width - 4.dp.toPx(), centerY)) }
+        assertEquals(listOf(camera.key), catalog.launched)
     }
 }

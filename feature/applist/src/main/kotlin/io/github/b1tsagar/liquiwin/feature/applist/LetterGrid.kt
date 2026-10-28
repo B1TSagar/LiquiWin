@@ -34,8 +34,6 @@ import io.github.b1tsagar.liquiwin.core.design.theme.LocalWpUnits
 internal fun LetterGrid(letters: List<LetterCell>, onPick: (String) -> Unit, onDismiss: () -> Unit) {
     BackHandler(onBack = onDismiss)
     val units = LocalWpUnits.current
-    val colors = LocalLiquiWinColors.current
-    val letterStyle = LocalLiquiWinType.current.pageTitle.copy(fontSize = units.sp(42.667f))
     val cell = units.dp(96f)
     val gap = units.dp(12f)
     // The scroll also keeps touches from reaching the list underneath.
@@ -52,22 +50,30 @@ internal fun LetterGrid(letters: List<LetterCell>, onPick: (String) -> Unit, onD
         for (row in letters.chunked(4)) {
             Row(Modifier.width(cell * 4 + gap * 3), horizontalArrangement = Arrangement.spacedBy(gap)) {
                 for (letter in row) {
-                    Box(
-                        Modifier
-                            .size(cell)
+                    LetterSquare(
+                        letter.label,
+                        filled = letter.hasApps,
+                        modifier = Modifier
                             .testTag("letter-${letter.label}")
-                            .background(if (letter.hasApps) colors.accent else colors.chrome)
                             .then(if (letter.hasApps) Modifier.clickable { onPick(letter.label) } else Modifier),
-                    ) {
-                        WpText(
-                            text = letter.label,
-                            style = letterStyle,
-                            modifier = Modifier.align(Alignment.BottomStart).padding(start = units.dp(12f), bottom = units.dp(8f)),
-                            color = if (letter.hasApps) colors.foreground else colors.subtle,
-                        )
-                    }
+                    )
                 }
             }
         }
+    }
+}
+
+/** A letter in a 96 WP px square: the accent colour when [filled], chrome when not, the letter at its bottom left. */
+@Composable
+internal fun LetterSquare(label: String, filled: Boolean, modifier: Modifier = Modifier) {
+    val units = LocalWpUnits.current
+    val colors = LocalLiquiWinColors.current
+    Box(modifier.size(units.dp(96f)).background(if (filled) colors.accent else colors.chrome)) {
+        WpText(
+            text = label,
+            style = LocalLiquiWinType.current.pageTitle.copy(fontSize = units.sp(42.667f)),
+            modifier = Modifier.align(Alignment.BottomStart).padding(start = units.dp(12f), bottom = units.dp(8f)),
+            color = if (filled) colors.foreground else colors.subtle,
+        )
     }
 }
