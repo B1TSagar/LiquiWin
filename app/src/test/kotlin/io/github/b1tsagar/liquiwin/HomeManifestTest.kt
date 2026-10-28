@@ -1,6 +1,7 @@
 package io.github.b1tsagar.liquiwin
 
 import android.Manifest
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -37,5 +38,12 @@ class HomeManifestTest {
     @Test fun noAccessibilityService() {
         val services = pm.getPackageInfo(context.packageName, PackageManager.GET_SERVICES).services.orEmpty()
         assertTrue(services.none { it.permission == Manifest.permission.BIND_ACCESSIBILITY_SERVICE })
+    }
+
+    @Test fun theNotificationListenerIsDeclaredAndProtected() {
+        val component = ComponentName(context, "io.github.b1tsagar.liquiwin.feature.notifications.LiquiWinNotificationListener")
+        val service = context.packageManager.getServiceInfo(component, 0)
+        assertEquals(Manifest.permission.BIND_NOTIFICATION_LISTENER_SERVICE, service.permission)
+        assertTrue(service.exported)
     }
 }

@@ -8,13 +8,18 @@ import android.os.StrictMode
 import android.os.SystemClock
 import io.github.b1tsagar.liquiwin.crash.CrashGuard
 import io.github.b1tsagar.liquiwin.crash.PrefsCrashStore
+import io.github.b1tsagar.liquiwin.feature.notifications.NotificationIntake
+import io.github.b1tsagar.liquiwin.feature.notifications.NotificationsHost
 
-class LiquiWinApp : Application() {
+class LiquiWinApp : Application(), NotificationsHost {
     lateinit var crashGuard: CrashGuard
         private set
 
     /** Built on first use, so nothing opens a database before it's needed, and safe mode never builds it. */
     val graph: AppGraph by lazy { AppGraph(this) }
+
+    override val notificationIntake: NotificationIntake?
+        get() = if (crashGuard.shouldStartInSafeMode()) null else graph.notificationIntake
 
     override fun onCreate() {
         // The guard comes first, so a crash anywhere after this counts.

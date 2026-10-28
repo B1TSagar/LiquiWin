@@ -42,6 +42,7 @@ dependencies {
     implementation(project(":feature:start"))
     implementation(project(":feature:applist"))
     implementation(project(":feature:search"))
+    implementation(project(":feature:notifications"))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
