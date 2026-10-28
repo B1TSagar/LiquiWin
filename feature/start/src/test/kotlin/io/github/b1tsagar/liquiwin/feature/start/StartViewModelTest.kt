@@ -13,6 +13,7 @@ import io.github.b1tsagar.liquiwin.core.tiles.model.SourceId
 import io.github.b1tsagar.liquiwin.core.tiles.model.TilePlacement
 import io.github.b1tsagar.liquiwin.core.tiles.model.TileSize
 import io.github.b1tsagar.liquiwin.core.tiles.source.SourceRegistry
+import io.github.b1tsagar.liquiwin.core.tiles.source.TileItem
 import io.github.b1tsagar.liquiwin.feature.start.layout.Cell
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -111,5 +112,24 @@ class StartViewModelTest {
         source.itemState.value = listOf(testItem("b", at = 20), testItem("a", at = 10))
         val live = viewModel.live.first { it[1L]?.unread == 2 }
         assertEquals(listOf("b", "a"), live.getValue(1L).rotation.map { it.key })
+    }
+
+    private val chat = testApp("Chat")
+    private val chatSource = FakeTileSource(SourceId.forApp(chat.key.packageName, 0))
+    private val chatCatalog = FakeAppCatalog(apps = listOf(chat))
+    private fun chatViewModel() =
+        StartViewModel(FakeTileStore(), chatCatalog, gridWidth = 6, SourceRegistry { if (it == chatSource.id) chatSource else null }).apply { pin(chat.key) }
+
+    @Test fun openingWithAnItemOpensItThroughItsSource() = runTest {
+        val item = testItem("a", source = chatSource.id)
+        chatViewModel().open(1, null, null, item)
+        assertEquals(listOf<TileItem?>(item), chatSource.opened)
+        assertEquals(emptyList<AppKey>(), chatCatalog.launched)
+    }
+
+    @Test fun openingWithoutAnItemStillLaunchesTheApp() = runTest {
+        chatViewModel().open(1, null, null)
+        assertEquals(listOf(chat.key), chatCatalog.launched)
+        assertEquals(emptyList<TileItem?>(), chatSource.opened)
     }
 }

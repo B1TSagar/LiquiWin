@@ -14,6 +14,7 @@ import io.github.b1tsagar.liquiwin.core.tiles.model.TileKind
 import io.github.b1tsagar.liquiwin.core.tiles.model.TilePlacement
 import io.github.b1tsagar.liquiwin.core.tiles.model.TileSize
 import io.github.b1tsagar.liquiwin.core.tiles.source.SourceRegistry
+import io.github.b1tsagar.liquiwin.core.tiles.source.TileItem
 import io.github.b1tsagar.liquiwin.core.tiles.source.TileState
 import io.github.b1tsagar.liquiwin.core.tiles.source.tileState
 import io.github.b1tsagar.liquiwin.feature.start.layout.Cell
@@ -58,7 +59,7 @@ class StartViewModel(
     private val store: TileStore,
     private val catalog: AppCatalog,
     private val gridWidth: Int,
-    sources: SourceRegistry = SourceRegistry { null },
+    private val sources: SourceRegistry = SourceRegistry { null },
 ) : ViewModel() {
     private val mutex = Mutex()
     private val edit = MutableStateFlow<EditState?>(null)
@@ -171,13 +172,19 @@ class StartViewModel(
         edit.value = null
     }
 
-    /** In edit mode this selects the tile. A tile of a paused profile asks to unpause it; any other launches its app. */
-    fun open(tileId: Long, sourceBounds: Rect?, options: Bundle?) {
+    /**
+     * In edit mode this selects the tile. A tile of a paused profile asks to unpause it; any other opens [item] through its
+     * source or, with no item, launches its app.
+     */
+    fun open(tileId: Long, sourceBounds: Rect?, options: Bundle?, item: TileItem? = null) {
         if (edit.value != null) return select(tileId)
         viewModelScope.launch {
             val key = store.tiles.first().firstOrNull { it.id == tileId }?.appKey ?: return@launch
-            if (catalog.profiles.value.any { it.userSerial == key.userSerial && it.isPaused }) catalog.requestUnpause(key.userSerial)
-            else catalog.launch(key, sourceBounds, options)
+            when {
+                catalog.profiles.value.any { it.userSerial == key.userSerial && it.isPaused } -> catalog.requestUnpause(key.userSerial)
+                item != null -> sources.source(item.sourceId)?.open(item)
+                else -> catalog.launch(key, sourceBounds, options)
+            }
         }
     }
 

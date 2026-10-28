@@ -1,10 +1,12 @@
 package io.github.b1tsagar.liquiwin.feature.start
 
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.click
@@ -15,6 +17,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performCustomAccessibilityActionWithLabel
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.unit.dp
@@ -32,6 +35,7 @@ import io.github.b1tsagar.liquiwin.core.tiles.model.SourceId
 import io.github.b1tsagar.liquiwin.core.tiles.model.TilePlacement
 import io.github.b1tsagar.liquiwin.core.tiles.model.TileSize
 import io.github.b1tsagar.liquiwin.core.tiles.source.SourceRegistry
+import io.github.b1tsagar.liquiwin.core.tiles.source.TileItem
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -145,5 +149,31 @@ class StartScreenTest {
         cameraSource.itemState.value = List(3) { testItem("m$it", at = it.toLong(), source = cameraSource.id) }
         show()
         compose.onNodeWithTag("tile-1").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "3 unread"))
+    }
+
+    @Test fun tappingAContentFaceOpensTheItemAndTheLabelStripTheApp() {
+        Settings.Global.putFloat(compose.activity.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 0f) // the item shows at once
+        val item = testItem("a", source = cameraSource.id)
+        cameraSource.itemState.value = listOf(item)
+        show()
+        compose.onNodeWithTag("tile-1").performTouchInput { click(Offset(centerX, 10f)) }
+        compose.waitUntil(5_000) { cameraSource.opened.isNotEmpty() }
+        assertEquals(listOf<TileItem?>(item), cameraSource.opened)
+        assertEquals(emptyList<AppKey>(), catalog.launched)
+        compose.mainClock.advanceTimeBy(2_000) // LiquiWin stayed in front, so the tiles come back
+        compose.onNodeWithTag("tile-1").performTouchInput { click(Offset(centerX, height - 5f)) }
+        compose.waitUntil(5_000) { catalog.launched.isNotEmpty() }
+        assertEquals(listOf(camera.key), catalog.launched)
+    }
+
+    @OptIn(ExperimentalTestApi::class) // performCustomAccessibilityActionWithLabel
+    @Test fun talkBackHearsTheItemAndCanOpenTheApp() {
+        Settings.Global.putFloat(compose.activity.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
+        cameraSource.itemState.value = listOf(testItem("a", source = cameraSource.id))
+        show()
+        compose.onNodeWithTag("tile-1").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "1 unread, Alex: see you at 6"))
+        compose.onNodeWithTag("tile-1").performCustomAccessibilityActionWithLabel("open Camera")
+        compose.waitUntil(5_000) { catalog.launched.isNotEmpty() }
+        assertEquals(listOf(camera.key), catalog.launched)
     }
 }

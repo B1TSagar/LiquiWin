@@ -64,8 +64,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
@@ -96,11 +98,13 @@ import io.github.b1tsagar.liquiwin.core.tiles.model.TileSize
 import io.github.b1tsagar.liquiwin.core.tiles.source.TileItem
 import io.github.b1tsagar.liquiwin.core.tiles.source.TileState
 import io.github.b1tsagar.liquiwin.feature.start.layout.Cell
+import io.github.b1tsagar.liquiwin.feature.start.live.LABEL_STRIP_WP_PX
 import io.github.b1tsagar.liquiwin.feature.start.live.TileFace
 import io.github.b1tsagar.liquiwin.feature.start.live.TileFlipState
 import io.github.b1tsagar.liquiwin.feature.start.live.TileTicker
 import io.github.b1tsagar.liquiwin.feature.start.live.faces
 import io.github.b1tsagar.liquiwin.feature.start.live.nextFace
+import io.github.b1tsagar.liquiwin.feature.start.live.tileTapTarget
 import kotlin.math.roundToInt
 import kotlin.random.Random
 import kotlinx.coroutines.Job
@@ -173,11 +177,11 @@ fun StartScreen(
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val launching = remember { JobRef() }
     SideEffect {
-        controller.launch = { id, bounds ->
+        controller.launch = { id, bounds, item ->
             if (launching.value?.isActive != true) launching.value = scope.launch {
                 tapped = id
                 flip.play(Turnstile.OUT, lastTurn(id))
-                viewModel.open(id, bounds, ActivityOptions.makeCustomAnimation(context, android.R.anim.fade_in, 0).toBundle())
+                viewModel.open(id, bounds, ActivityOptions.makeCustomAnimation(context, android.R.anim.fade_in, 0).toBundle(), item)
                 // A launch that fails leaves LiquiWin on screen, so nothing would bring the tiles back: they come back here.
                 val left = withTimeoutOrNull(1_500) { lifecycle.currentStateFlow.first { !it.isAtLeast(Lifecycle.State.RESUMED) } }
                 if (left == null) {
@@ -349,6 +353,9 @@ private fun TileSlot(
     // A flip draws the old face until it's edge-on at 90°.
     val firstHalf by remember { derivedStateOf { liveFace.from != null && liveFace.angle < 90f } }
     val drawn = if (!still && firstHalf) tileFaces.firstOrNull { it.key == liveFace.from } ?: TileFace.Front else face
+    // A tap opens what's under the finger on the face drawn: its label strip and the front open the app (§5.5).
+    val labelStripPx = with(LocalDensity.current) { LocalWpUnits.current.dp(LABEL_STRIP_WP_PX).toPx() }
+    val tapTarget by rememberUpdatedState { y: Float, heightPx: Float -> tileTapTarget(drawn, y, heightPx, labelStripPx) }
     val lines = face.shownItems.map { listOfNotNull(it.title, it.text).joinToString(": ") }
     val said = if (liveTilesPaused) "live tile paused" else (listOfNotNull("$unread unread".takeIf { unread > 0 }) + lines).joinToString(", ").ifEmpty { null }
 
@@ -395,8 +402,15 @@ private fun TileSlot(
             .semantics {
                 contentDescription = tile.label
                 said?.let { stateDescription = it }
-                onClick { controller.tap(current, coords.value, editing); true }
+                onClick { controller.tap(current, coords.value, editing, face.shownItems.firstOrNull()); true }
                 onLongClick { controller.longPress(current); true }
+                // A content face's tap opens its first item, so the app and a stack's other items get actions of their own.
+                if (face != TileFace.Front) {
+                    customActions = listOf(CustomAccessibilityAction("open ${tile.label}") { controller.tap(current, coords.value, editing); true }) +
+                        (face as? TileFace.Stack)?.items.orEmpty().drop(1).map { item ->
+                            CustomAccessibilityAction("open ${item.title}") { controller.tap(current, coords.value, editing, item); true }
+                        }
+                }
             }
             .onPlaced { coords.value = it }
             .pointerInput(tile.id) {
@@ -411,7 +425,7 @@ private fun TileSlot(
                         if (cancelled) return@awaitEachGesture
                         if (up != null) {
                             up.consume()
-                            controller.tap(current, coords.value, editing)
+                            controller.tap(current, coords.value, editing, tapTarget(up.position.y, size.height.toFloat()))
                             return@awaitEachGesture
                         }
                         controller.longPress(current)
@@ -510,8 +524,8 @@ private class StartController(private val viewModel: StartViewModel) {
         slot.face.flipTo(nextFace(slot.faces(), slot.face.face).key)
     }
 
-    /** Opens a tile's app from its bounds in the window, however the screen wants to. */
-    var launch: (Long, Rect?) -> Unit = { id, bounds -> viewModel.open(id, bounds, null) }
+    /** Opens a tile's app, or the item given, from its bounds in the window, however the screen wants to. */
+    var launch: (Long, Rect?, TileItem?) -> Unit = { id, bounds, item -> viewModel.open(id, bounds, null, item) }
     private var haptic: HapticFeedback? = null
     private var sidePx = 0f
     private var stepPx = 1f
@@ -530,13 +544,13 @@ private class StartController(private val viewModel: StartViewModel) {
         (d.topLeft.y / stepPx).roundToInt().coerceAtLeast(0),
     )
 
-    /** In edit mode this selects the tile; otherwise it hands the tile and its bounds in the window to [launch]. */
-    fun tap(tile: StartTile, coords: LayoutCoordinates?, editing: Boolean) {
+    /** In edit mode this selects the tile; otherwise it hands the tile, its bounds in the window and any [item] to [launch]. */
+    fun tap(tile: StartTile, coords: LayoutCoordinates?, editing: Boolean, item: TileItem? = null) {
         if (editing) return viewModel.open(tile.id, null, null)
         val bounds = coords?.takeIf { it.isAttached }?.boundsInWindow()?.let {
             Rect(it.left.roundToInt(), it.top.roundToInt(), it.right.roundToInt(), it.bottom.roundToInt())
         }
-        launch(tile.id, bounds)
+        launch(tile.id, bounds, item)
     }
 
     fun longPress(tile: StartTile) {
