@@ -25,4 +25,5 @@ include(
     ":feature:start",
     ":feature:applist",
     ":feature:search",
+    ":feature:notifications",
 )
