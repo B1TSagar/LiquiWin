@@ -65,6 +65,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
@@ -85,6 +86,7 @@ import io.github.b1tsagar.liquiwin.core.design.theme.LocalLiquiWinColors
 import io.github.b1tsagar.liquiwin.core.design.theme.LocalLiquiWinType
 import io.github.b1tsagar.liquiwin.core.design.theme.LocalWpUnits
 import io.github.b1tsagar.liquiwin.core.tiles.model.TileSize
+import io.github.b1tsagar.liquiwin.core.tiles.source.TileState
 import io.github.b1tsagar.liquiwin.feature.start.layout.Cell
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Job
@@ -101,6 +103,7 @@ private const val EMPTY_HINT = "swipe left for your apps. long-press one and cho
  * selects a tile, the selected tile moves with a drag, and any other tile moves after a long-press, so a swipe on it
  * still scrolls. When [shown] turns false the tiles turnstile away and then [onHidden] is called. The tiles come back by
  * playing their exit backwards, once start is shown again and LiquiWin is [onScreen], fully back from another app.
+ * Each tile shows its unread count, or a pause mark while [liveTilesPaused].
  */
 @Composable
 fun StartScreen(
@@ -112,8 +115,10 @@ fun StartScreen(
     onScreen: Boolean = true,
     onHidden: () -> Unit = {},
     banner: @Composable () -> Unit = {},
+    liveTilesPaused: Boolean = false,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val live by viewModel.live.collectAsStateWithLifecycle()
     val units = LocalWpUnits.current
     val style = LocalStyleFacets.current
     val density = LocalDensity.current
@@ -207,7 +212,7 @@ fun StartScreen(
                 .padding(bottom = units.dp(96f)),
         ) {
             banner()
-            TileGrid(state, metrics, sidePx, stepPx, controller, icon, flip, tapped)
+            TileGrid(state, metrics, sidePx, stepPx, controller, icon, flip, tapped, live, liveTilesPaused)
         }
         if (state.loaded && state.tiles.isEmpty()) {
             WpText(
@@ -232,6 +237,8 @@ private fun TileGrid(
     icon: suspend (LauncherApp) -> AppIcon?,
     flip: TurnstileClock,
     tapped: Long?,
+    live: Map<Long, TileState>,
+    liveTilesPaused: Boolean,
 ) {
     val cells = state.tiles.associate { it.id to (state.edit?.preview?.get(it.id) ?: it.cell) }
     val rows = state.tiles.maxOfOrNull { cells.getValue(it.id).y + it.size.heightUnits } ?: 0
@@ -244,7 +251,7 @@ private fun TileGrid(
                 val cell = cells.getValue(tile.id)
                 val widthPx = with(density) { metrics.sizeDp(tile.size).width.toPx() }
                 val pivotX = (hingePx - (sidePx + cell.x * stepPx)) / widthPx
-                TileSlot(tile, cell, metrics, sidePx, stepPx, state.edit, controller, icon, flip, turns.getValue(tile.id), pivotX)
+                TileSlot(tile, cell, metrics, sidePx, stepPx, state.edit, controller, icon, flip, turns.getValue(tile.id), pivotX, live[tile.id], liveTilesPaused)
             }
         },
         modifier = Modifier.fillMaxWidth().height(if (rows == 0) 0.dp else (rows * metrics.stepDp - metrics.gapDp).dp),
@@ -267,7 +274,10 @@ private fun TileSlot(
     flip: TurnstileClock,
     turn: Int,
     pivotX: Float,
+    live: TileState?,
+    liveTilesPaused: Boolean,
 ) {
+    val unread = live?.unread ?: 0
     val targetPx = Offset(sidePx + target.x * stepPx, target.y * stepPx)
     val position = remember { Animatable(targetPx, Offset.VectorConverter) }
     val dragged = controller.drag?.id == tile.id
@@ -295,6 +305,7 @@ private fun TileSlot(
             .testTag("tile-${tile.id}")
             .semantics {
                 contentDescription = tile.label
+                if (liveTilesPaused) stateDescription = "live tile paused" else if (unread > 0) stateDescription = "$unread unread"
                 onClick { controller.tap(current, coords.value, editing); true }
                 onLongClick { controller.longPress(current); true }
             }
@@ -339,7 +350,10 @@ private fun TileSlot(
                 }
             },
     ) {
-        StartTileView(tile, metrics, icon, Modifier.clearAndSetSemantics {}.tilt(enabled = edit == null))
+        StartTileView(
+            tile, metrics, icon, Modifier.clearAndSetSemantics {}.tilt(enabled = edit == null),
+            unread = unread, liveTilesPaused = liveTilesPaused,
+        )
         if (selected && controller.drag == null) {
             EditControls(metrics.sizeDp(tile.size), onUnpin = { controller.unpin(tile.id) }, onResize = { controller.resize(tile.id) })
         }

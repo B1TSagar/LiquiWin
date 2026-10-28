@@ -36,6 +36,7 @@ import io.github.b1tsagar.liquiwin.core.data.apps.AppCatalog
 import io.github.b1tsagar.liquiwin.core.design.style.StyleFacets
 import io.github.b1tsagar.liquiwin.core.design.theme.LocalLiquiWinColors
 import io.github.b1tsagar.liquiwin.core.tiles.TileStore
+import io.github.b1tsagar.liquiwin.core.tiles.source.SourceRegistry
 import io.github.b1tsagar.liquiwin.feature.applist.AppListScreen
 import io.github.b1tsagar.liquiwin.feature.applist.AppListViewModel
 import io.github.b1tsagar.liquiwin.feature.search.AppSearchProvider
@@ -56,6 +57,7 @@ class HomeDependencies(
     val isDefaultHome: () -> Boolean,
     val onSetHome: () -> Unit,
     val onOpenHomeSettings: () -> Unit,
+    val sources: SourceRegistry = SourceRegistry { null },
 )
 
 enum class HomePress { FROM_APP, WHILE_ON_HOME }
@@ -68,7 +70,7 @@ enum class HomePress { FROM_APP, WHILE_ON_HOME }
  */
 @Composable
 fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Modifier = Modifier, windowEntered: Flow<Unit> = emptyFlow()) {
-    val start = viewModel { StartViewModel(deps.tileStore, deps.catalog, StyleFacets.Wp81Basic.gridUnits) }
+    val start = viewModel { StartViewModel(deps.tileStore, deps.catalog, StyleFacets.Wp81Basic.gridUnits, deps.sources) }
     val appList = viewModel { AppListViewModel(deps.catalog, start.pinnedApps, start::pin) }
     val search = viewModel { SearchViewModel(listOf(AppSearchProvider(deps.catalog)), SearchOpener(deps.catalog)) }
     val icon = remember(deps.catalog) { deps.catalog::icon }

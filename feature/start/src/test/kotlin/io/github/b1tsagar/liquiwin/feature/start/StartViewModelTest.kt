@@ -3,12 +3,16 @@ package io.github.b1tsagar.liquiwin.feature.start
 import io.github.b1tsagar.liquiwin.core.data.apps.AppKey
 import io.github.b1tsagar.liquiwin.core.data.apps.AppProfile
 import io.github.b1tsagar.liquiwin.core.testing.FakeAppCatalog
+import io.github.b1tsagar.liquiwin.core.testing.FakeTileSource
 import io.github.b1tsagar.liquiwin.core.testing.FakeTileStore
 import io.github.b1tsagar.liquiwin.core.testing.MainDispatcherRule
 import io.github.b1tsagar.liquiwin.core.testing.appTile
 import io.github.b1tsagar.liquiwin.core.testing.testApp
+import io.github.b1tsagar.liquiwin.core.testing.testItem
+import io.github.b1tsagar.liquiwin.core.tiles.model.SourceId
 import io.github.b1tsagar.liquiwin.core.tiles.model.TilePlacement
 import io.github.b1tsagar.liquiwin.core.tiles.model.TileSize
+import io.github.b1tsagar.liquiwin.core.tiles.source.SourceRegistry
 import io.github.b1tsagar.liquiwin.feature.start.layout.Cell
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -97,5 +101,15 @@ class StartViewModelTest {
         vm.open(2, null, null)
         assertEquals(2L, vm.state.value.edit!!.selectedId)
         assertEquals(emptyList<AppKey>(), catalog.launched)
+    }
+
+    @Test fun eachTilesLiveStateComesFromItsSources() = runTest {
+        val chat = testApp("Chat")
+        val source = FakeTileSource(SourceId.forApp(chat.key.packageName, 0))
+        val viewModel = StartViewModel(FakeTileStore(), FakeAppCatalog(apps = listOf(chat)), gridWidth = 6, SourceRegistry { if (it == source.id) source else null })
+        viewModel.pin(chat.key)
+        source.itemState.value = listOf(testItem("b", at = 20), testItem("a", at = 10))
+        val live = viewModel.live.first { it[1L]?.unread == 2 }
+        assertEquals(listOf("b", "a"), live.getValue(1L).rotation.map { it.key })
     }
 }

@@ -13,14 +13,21 @@ import io.github.b1tsagar.liquiwin.core.tiles.model.Tile
 import io.github.b1tsagar.liquiwin.core.tiles.model.TileKind
 import io.github.b1tsagar.liquiwin.core.tiles.model.TilePlacement
 import io.github.b1tsagar.liquiwin.core.tiles.model.TileSize
+import io.github.b1tsagar.liquiwin.core.tiles.source.SourceRegistry
+import io.github.b1tsagar.liquiwin.core.tiles.source.TileState
+import io.github.b1tsagar.liquiwin.core.tiles.source.tileState
 import io.github.b1tsagar.liquiwin.feature.start.layout.Cell
 import io.github.b1tsagar.liquiwin.feature.start.layout.GridLayout
 import io.github.b1tsagar.liquiwin.feature.start.layout.Placed
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -45,9 +52,14 @@ data class EditState(val selectedId: Long?, val preview: Map<Long, Cell>?)
 
 /**
  * The start screen on a grid [gridWidth] units wide. Every edit, every repair and every commit of a repaired
- * arrangement runs under one [Mutex] and reads the latest store state.
+ * arrangement runs under one [Mutex] and reads the latest store state. [sources] serves the tiles' live sources.
  */
-class StartViewModel(private val store: TileStore, private val catalog: AppCatalog, private val gridWidth: Int) : ViewModel() {
+class StartViewModel(
+    private val store: TileStore,
+    private val catalog: AppCatalog,
+    private val gridWidth: Int,
+    sources: SourceRegistry = SourceRegistry { null },
+) : ViewModel() {
     private val mutex = Mutex()
     private val edit = MutableStateFlow<EditState?>(null)
 
@@ -76,6 +88,17 @@ class StartViewModel(private val store: TileStore, private val catalog: AppCatal
     val pinnedApps: StateFlow<Set<AppKey>> = store.tiles
         .map { tiles -> tiles.mapNotNullTo(HashSet()) { if (it.kind == TileKind.APP) it.appKey else null } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    /** Each tile's live state, by tile id. It's apart from [state], so a new message never re-runs the layout. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val live: StateFlow<Map<Long, TileState>> = store.tiles
+        .map { tiles -> tiles.map { it.id to it.sources } }
+        .distinctUntilChanged()
+        .flatMapLatest { tiles ->
+            if (tiles.isEmpty()) flowOf(emptyMap<Long, TileState>())
+            else combine(tiles.map { (id, ids) -> tileState(ids.mapNotNull(sources::source)).map { id to it } }) { it.toMap() }
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     init {
         // A saved arrangement that needs repair (a tile never placed, say) is committed once, repaired.

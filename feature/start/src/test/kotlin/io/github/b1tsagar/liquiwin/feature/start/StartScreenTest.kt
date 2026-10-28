@@ -4,6 +4,9 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
@@ -20,11 +23,15 @@ import io.github.b1tsagar.liquiwin.core.data.apps.AppKey
 import io.github.b1tsagar.liquiwin.core.data.apps.LauncherApp
 import io.github.b1tsagar.liquiwin.core.design.theme.LiquiWinTheme
 import io.github.b1tsagar.liquiwin.core.testing.FakeAppCatalog
+import io.github.b1tsagar.liquiwin.core.testing.FakeTileSource
 import io.github.b1tsagar.liquiwin.core.testing.FakeTileStore
 import io.github.b1tsagar.liquiwin.core.testing.MainDispatcherRule
 import io.github.b1tsagar.liquiwin.core.testing.testApp
+import io.github.b1tsagar.liquiwin.core.testing.testItem
+import io.github.b1tsagar.liquiwin.core.tiles.model.SourceId
 import io.github.b1tsagar.liquiwin.core.tiles.model.TilePlacement
 import io.github.b1tsagar.liquiwin.core.tiles.model.TileSize
+import io.github.b1tsagar.liquiwin.core.tiles.source.SourceRegistry
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -40,10 +47,12 @@ class StartScreenTest {
     private val camera = testApp("Camera"); private val maps = testApp("Maps"); private val mail = testApp("Mail")
     private val store = FakeTileStore()
     private val catalog = FakeAppCatalog(apps = listOf(camera, maps, mail))
+    private val cameraSource = FakeTileSource(SourceId.forApp(camera.key.packageName, 0))
+    private val sources = SourceRegistry { if (it == cameraSource.id) cameraSource else null }
 
     // Pins the apps (medium tiles at (0,0), (2,0) and (4,0) by default), then shows the start screen.
     private fun show(pinned: List<LauncherApp> = listOf(camera, maps, mail), scroll: ScrollState? = null) {
-        val viewModel = StartViewModel(store, catalog, gridWidth = 6)
+        val viewModel = StartViewModel(store, catalog, gridWidth = 6, sources)
         pinned.forEach { viewModel.pin(it.key) }
         compose.setContent { LiquiWinTheme { StartScreen(viewModel, { null }, scroll ?: rememberScrollState()) } }
     }
@@ -130,5 +139,11 @@ class StartScreenTest {
     @Test fun anEmptyStartScreenShowsTheHint() {
         show(pinned = emptyList())
         compose.onNodeWithText("swipe left for your apps. long-press one and choose pin to start.").assertExists()
+    }
+
+    @Test fun talkBackHearsTheUnreadCount() {
+        cameraSource.itemState.value = List(3) { testItem("m$it", at = it.toLong(), source = cameraSource.id) }
+        show()
+        compose.onNodeWithTag("tile-1").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "3 unread"))
     }
 }

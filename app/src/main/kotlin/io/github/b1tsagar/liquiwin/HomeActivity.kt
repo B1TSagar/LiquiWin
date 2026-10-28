@@ -61,6 +61,7 @@ class HomeActivity : ComponentActivity() {
             isDefaultHome = graph.homeRole::isHeld,
             onSetHome = { setHome.launch(graph.homeRole.requestIntent() ?: graph.homeRole.settingsIntent()) },
             onOpenHomeSettings = { startActivity(graph.homeRole.settingsIntent()) },
+            sources = graph.sources,
         )
         setContent { LiquiWinTheme { HomeRoot(deps, homePresses, windowEntered = windowEntered) } }
     }
