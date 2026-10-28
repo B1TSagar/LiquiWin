@@ -92,20 +92,28 @@ internal fun StartTileView(
                     }
                     is TileFace.Stack -> Column(Modifier.fillMaxSize()) {
                         repeat(STACK_SIZE) { i ->
-                            Box(Modifier.weight(1f).fillMaxWidth()) { face.items.getOrNull(i)?.let { ItemRow(it, avatarWpPx = 48f, lines = 2) } }
+                            Box(Modifier.weight(1f).fillMaxWidth()) {
+                                face.items.getOrNull(i)?.let {
+                                    // The end padding keeps the text out from under the row's chat button.
+                                    ItemRow(it, avatarWpPx = 48f, lines = 2, Modifier.padding(end = units.dp(24f)))
+                                    ChatGlyph(Modifier.align(Alignment.BottomEnd))
+                                }
+                            }
                         }
                     }
                 }
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) { if (tile.size != TileSize.SMALL) TileText(tile.label, maxLines = 1) }
-                if (face == TileFace.Front) {
-                    if (liveTilesPaused) {
+                when (face) {
+                    TileFace.Front -> if (liveTilesPaused) {
                         // No description: the slot's state description says it.
                         Image(LiquiWinIcons.Pause, contentDescription = null, Modifier.size(units.dp(16f)).testTag("live-paused"))
                     } else if (unread > 0) {
                         TileText(if (unread > 99) "99+" else unread.toString(), maxLines = 1)
                     }
+                    is TileFace.Item -> ChatGlyph()
+                    is TileFace.Stack -> Unit
                 }
             }
         }
@@ -119,10 +127,16 @@ internal fun StartTileView(
     }
 }
 
+// No description: the slot's custom actions say it. The tap target around it is the slot's, 48 dp.
+@Composable
+private fun ChatGlyph(modifier: Modifier = Modifier) {
+    Image(LiquiWinIcons.Chat, contentDescription = null, modifier.size(LocalWpUnits.current.dp(16f)).testTag("tile-chat"))
+}
+
 // The avatar on the left, with the sender and up to [lines] lines of text to its right.
 @Composable
-private fun ItemRow(item: TileItem, avatarWpPx: Float, lines: Int) {
-    Row {
+private fun ItemRow(item: TileItem, avatarWpPx: Float, lines: Int, modifier: Modifier = Modifier) {
+    Row(modifier) {
         Avatar(item.avatar, LocalWpUnits.current.dp(avatarWpPx))
         Column {
             TileText(item.title, maxLines = 1, sender = true)

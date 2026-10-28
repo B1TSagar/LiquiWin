@@ -17,3 +17,24 @@ internal fun tileTapTarget(face: TileFace, y: Float, heightPx: Float, labelStrip
         is TileFace.Stack -> face.items.getOrNull((y / (body / STACK_SIZE)).toInt())
     }
 }
+
+/**
+ * The item whose chat button a tap at ([x], [y]) is on, or null (§5.5). The button is the bottom-right [buttonPx] corner of
+ * an item face, and of each of a stack's rows above the label strip.
+ */
+internal fun tileChatTarget(
+    face: TileFace, x: Float, y: Float, widthPx: Float, heightPx: Float, labelStripPx: Float, buttonPx: Float,
+): TileItem? {
+    if (x < widthPx - buttonPx) return null
+    return when (face) {
+        TileFace.Front -> null
+        is TileFace.Item -> face.item.takeIf { y >= heightPx - buttonPx }
+        is TileFace.Stack -> {
+            val body = heightPx - labelStripPx
+            if (y >= body) return null
+            val row = body / STACK_SIZE
+            val i = (y / row).toInt()
+            face.items.getOrNull(i)?.takeIf { y >= (i + 1) * row - buttonPx }
+        }
+    }
+}

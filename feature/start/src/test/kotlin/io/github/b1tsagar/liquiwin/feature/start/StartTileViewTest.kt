@@ -5,7 +5,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -54,5 +56,18 @@ class StartTileViewTest {
         val stack = TileFace.Stack(listOf(testItem("a", title = "Alex"), testItem("b", title = "Sam"), testItem("c", title = "Jo")))
         compose.setContent { LiquiWinTheme { StartTileView(tile(TileSize.LARGE), metrics, { null }, face = stack) } }
         for (name in listOf("Alex", "Sam", "Jo")) compose.onNodeWithText(name).assertExists()
+    }
+
+    @Test fun contentFacesShowAChatButtonPerItem() {
+        var size by mutableStateOf(TileSize.MEDIUM)
+        var face: TileFace by mutableStateOf(TileFace.Front)
+        compose.setContent { LiquiWinTheme { StartTileView(tile(size), metrics, { null }, face = face) } }
+        fun chatButtons() = compose.onAllNodesWithTag("tile-chat", useUnmergedTree = true)
+        chatButtons().assertCountEquals(0)
+        face = TileFace.Item(testItem("a"))
+        chatButtons().assertCountEquals(1)
+        size = TileSize.LARGE
+        face = TileFace.Stack(listOf(testItem("a"), testItem("b"), testItem("c")))
+        chatButtons().assertCountEquals(3)
     }
 }

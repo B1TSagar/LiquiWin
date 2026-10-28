@@ -105,6 +105,7 @@ import io.github.b1tsagar.liquiwin.feature.start.live.TileFlipState
 import io.github.b1tsagar.liquiwin.feature.start.live.TileTicker
 import io.github.b1tsagar.liquiwin.feature.start.live.faces
 import io.github.b1tsagar.liquiwin.feature.start.live.nextFace
+import io.github.b1tsagar.liquiwin.feature.start.live.tileChatTarget
 import io.github.b1tsagar.liquiwin.feature.start.live.tileTapTarget
 import kotlin.math.roundToInt
 import kotlin.random.Random
@@ -128,7 +129,8 @@ private const val EMPTY_HINT = "swipe left for your apps. long-press one and cho
  * playing their exit backwards, once start is shown again and LiquiWin is [onScreen], fully back from another app.
  * Each tile shows its unread count, or a pause mark while [liveTilesPaused]. While start is shown, on screen and resumed,
  * outside edit mode and with animations on, the tiles on screen flip through their items one at a time, and a new item
- * flips its tile straight away. With animations off each tile shows the face after its front.
+ * flips its tile straight away. With animations off each tile shows the face after its front. Each item showing has a
+ * chat button, which hands the item to [onChat] (§5.5).
  */
 @Composable
 fun StartScreen(
@@ -141,6 +143,7 @@ fun StartScreen(
     onHidden: () -> Unit = {},
     banner: @Composable () -> Unit = {},
     liveTilesPaused: Boolean = false,
+    onChat: (TileItem) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val live by viewModel.live.collectAsStateWithLifecycle()
@@ -154,7 +157,10 @@ fun StartScreen(
     val stepPx = with(density) { metrics.stepDp.dp.toPx() }
     val controller = remember(viewModel) { StartController(viewModel) }
     val haptic = LocalHapticFeedback.current
-    SideEffect { controller.update(haptic, sidePx, stepPx, state.gridWidth) }
+    SideEffect {
+        controller.update(haptic, sidePx, stepPx, state.gridWidth)
+        controller.onChat = onChat
+    }
 
     // One clock turns every tile. Going away they turnstile out, a tapped tile last, and its app opens once the others
     // have gone; they come back by rewinding that, so the tapped tile turns back first.
@@ -357,6 +363,10 @@ private fun TileSlot(
     // A tap opens what's under the finger on the face drawn: its label strip and the front open the app (§5.5).
     val labelStripPx = with(LocalDensity.current) { LocalWpUnits.current.dp(LABEL_STRIP_WP_PX).toPx() }
     val tapTarget by rememberUpdatedState { y: Float, heightPx: Float -> tileTapTarget(drawn, y, heightPx, labelStripPx) }
+    val chatButtonPx = with(LocalDensity.current) { 48.dp.toPx() }
+    val chatTarget by rememberUpdatedState { x: Float, y: Float, widthPx: Float, heightPx: Float ->
+        tileChatTarget(drawn, x, y, widthPx, heightPx, labelStripPx, chatButtonPx)
+    }
     val lines = face.shownItems.map { listOfNotNull(it.title, it.text).joinToString(": ") }
     val said = if (liveTilesPaused) "live tile paused" else (listOfNotNull("$unread unread".takeIf { unread > 0 }) + lines).joinToString(", ").ifEmpty { null }
 
@@ -413,6 +423,9 @@ private fun TileSlot(
                     customActions = listOf(CustomAccessibilityAction("open ${tile.label}") { controller.tap(current, coords.value, editing); true }) +
                         (face as? TileFace.Stack)?.items.orEmpty().drop(1).map { item ->
                             CustomAccessibilityAction("open ${item.title}") { controller.tap(current, coords.value, editing, item); true }
+                        } +
+                        face.shownItems.map { item ->
+                            CustomAccessibilityAction("chat with ${item.title}") { controller.chat(current, coords.value, editing, item); true }
                         }
                 }
             }
@@ -429,7 +442,9 @@ private fun TileSlot(
                         if (cancelled) return@awaitEachGesture
                         if (up != null) {
                             up.consume()
-                            controller.tap(current, coords.value, editing, tapTarget(up.position.y, size.height.toFloat()))
+                            val chat = chatTarget(up.position.x, up.position.y, size.width.toFloat(), size.height.toFloat())
+                            if (chat != null) controller.chat(current, coords.value, editing, chat)
+                            else controller.tap(current, coords.value, editing, tapTarget(up.position.y, size.height.toFloat()))
                             return@awaitEachGesture
                         }
                         controller.longPress(current)
@@ -530,6 +545,7 @@ private class StartController(private val viewModel: StartViewModel) {
 
     /** Opens a tile's app, or the item given, from its bounds in the window, however the screen wants to. */
     var launch: (Long, Rect?, TileItem?) -> Unit = { id, bounds, item -> viewModel.open(id, bounds, null, item) }
+    var onChat: (TileItem) -> Unit = {}
     private var haptic: HapticFeedback? = null
     private var sidePx = 0f
     private var stepPx = 1f
@@ -555,6 +571,11 @@ private class StartController(private val viewModel: StartViewModel) {
             Rect(it.left.roundToInt(), it.top.roundToInt(), it.right.roundToInt(), it.bottom.roundToInt())
         }
         launch(tile.id, bounds, item)
+    }
+
+    /** Opens [item]'s chat. In edit mode, or on a tile whose profile is paused, it taps the tile instead. */
+    fun chat(tile: StartTile, coords: LayoutCoordinates?, editing: Boolean, item: TileItem) {
+        if (editing || tile.isPaused) tap(tile, coords, editing, item) else onChat(item)
     }
 
     fun longPress(tile: StartTile) {

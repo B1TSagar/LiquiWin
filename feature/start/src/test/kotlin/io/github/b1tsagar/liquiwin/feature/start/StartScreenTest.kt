@@ -53,12 +53,14 @@ class StartScreenTest {
     private val catalog = FakeAppCatalog(apps = listOf(camera, maps, mail))
     private val cameraSource = FakeTileSource(SourceId.forApp(camera.key.packageName, 0))
     private val sources = SourceRegistry { if (it == cameraSource.id) cameraSource else null }
+    private val chats = mutableListOf<TileItem>()
 
     // Pins the apps (medium tiles at (0,0), (2,0) and (4,0) by default), then shows the start screen.
-    private fun show(pinned: List<LauncherApp> = listOf(camera, maps, mail), scroll: ScrollState? = null) {
+    private fun show(pinned: List<LauncherApp> = listOf(camera, maps, mail), scroll: ScrollState? = null): StartViewModel {
         val viewModel = StartViewModel(store, catalog, gridWidth = 6, sources)
         pinned.forEach { viewModel.pin(it.key) }
-        compose.setContent { LiquiWinTheme { StartScreen(viewModel, { null }, scroll ?: rememberScrollState()) } }
+        compose.setContent { LiquiWinTheme { StartScreen(viewModel, { null }, scroll ?: rememberScrollState(), onChat = { chats += it }) } }
+        return viewModel
     }
 
     private fun longPressCamera() = compose.onNodeWithTag("tile-1").performTouchInput { longClick() }
@@ -161,7 +163,7 @@ class StartScreenTest {
         assertEquals(listOf<TileItem?>(item), cameraSource.opened)
         assertEquals(emptyList<AppKey>(), catalog.launched)
         compose.mainClock.advanceTimeBy(2_000) // LiquiWin stayed in front, so the tiles come back
-        compose.onNodeWithTag("tile-1").performTouchInput { click(Offset(centerX, height - 5f)) }
+        compose.onNodeWithTag("tile-1").performTouchInput { click(Offset(10f, height - 5f)) } // the strip's end is the chat button
         compose.waitUntil(5_000) { catalog.launched.isNotEmpty() }
         assertEquals(listOf(camera.key), catalog.launched)
     }
@@ -175,5 +177,37 @@ class StartScreenTest {
         compose.onNodeWithTag("tile-1").performCustomAccessibilityActionWithLabel("open Camera")
         compose.waitUntil(5_000) { catalog.launched.isNotEmpty() }
         assertEquals(listOf(camera.key), catalog.launched)
+    }
+
+    // §5.5: a chat button opens the item's chat, not the item
+    @Test fun theChatButtonOpensTheItemsChat() {
+        Settings.Global.putFloat(compose.activity.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 0f) // the item shows at once
+        val a = testItem("a", source = cameraSource.id)
+        cameraSource.itemState.value = listOf(a)
+        show(pinned = listOf(camera))
+        compose.onNodeWithTag("tile-1").performTouchInput { click(Offset(width - 5f, height - 5f)) }
+        assertEquals(listOf(a), chats)
+        assertEquals(emptyList<TileItem?>(), cameraSource.opened)
+    }
+
+    // Passes before the change too: it pins edit mode's tap ahead of the chat corner.
+    @Test fun inEditModeTheChatCornerSelectsTheTile() {
+        Settings.Global.putFloat(compose.activity.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
+        cameraSource.itemState.value = listOf(testItem("a", source = cameraSource.id))
+        val viewModel = show(pinned = listOf(camera, maps))
+        compose.onNodeWithTag("tile-2").performTouchInput { longClick() }
+        compose.onNodeWithTag("tile-1").performTouchInput { click(Offset(width - 5f, height - 5f)) }
+        assertEquals(1L, viewModel.state.value.edit?.selectedId)
+        assertEquals(emptyList<TileItem>(), chats)
+    }
+
+    @OptIn(ExperimentalTestApi::class) // performCustomAccessibilityActionWithLabel
+    @Test fun talkBackCanOpenTheChat() {
+        Settings.Global.putFloat(compose.activity.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
+        val a = testItem("a", source = cameraSource.id)
+        cameraSource.itemState.value = listOf(a)
+        show(pinned = listOf(camera))
+        compose.onNodeWithTag("tile-1").performCustomAccessibilityActionWithLabel("chat with Alex")
+        assertEquals(listOf(a), chats)
     }
 }
