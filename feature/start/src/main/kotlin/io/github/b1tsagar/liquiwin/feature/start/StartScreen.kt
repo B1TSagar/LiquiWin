@@ -130,7 +130,8 @@ private const val EMPTY_HINT = "swipe left for your apps. long-press one and cho
  * Each tile shows its unread count, or a pause mark while [liveTilesPaused]. While start is shown, on screen and resumed,
  * outside edit mode and with animations on, the tiles on screen flip through their items one at a time, and a new item
  * flips its tile straight away. With animations off each tile shows the face after its front. Each item showing has a
- * chat button, which hands the item to [onChat] (§5.5).
+ * chat button, which hands the item to [onChat] (§5.5). In edit mode a tile with hidden chats lists them from its
+ * bottom-left corner, each with show again (§5.8).
  */
 @Composable
 fun StartScreen(
@@ -202,6 +203,12 @@ fun StartScreen(
     val editing by rememberUpdatedState(state.edit != null)
     BackHandler(enabled = state.edit != null) { viewModel.exitEdit() }
 
+    // The open hidden chats list (§4.3). It closes once edit mode ends or its tile has none left.
+    val hiddenChats = controller.hiddenChatsOf?.takeIf { state.edit != null }?.let { live[it]?.hiddenChats }.orEmpty()
+    LaunchedEffect(hiddenChats.isEmpty()) { if (hiddenChats.isEmpty()) controller.hiddenChatsOf = null }
+    // The list covers start, so TalkBack mustn't find the tiles beneath it.
+    val underList = if (hiddenChats.isEmpty()) Modifier else Modifier.clearAndSetSemantics {}
+
     // Live tiles move only while they can be seen: start shown and on screen, LiquiWin resumed, outside edit mode, not
     // paused, and with Android's animations on, which is read again on every resume.
     val lifecycleState by lifecycle.currentStateAsState()
@@ -252,6 +259,7 @@ fun StartScreen(
         Column(
             Modifier
                 .fillMaxSize()
+                .then(underList)
                 .onPlaced { controller.viewport = it }
                 .verticalScroll(scrollState)
                 .windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Top))
@@ -270,7 +278,12 @@ fun StartScreen(
                 color = LocalLiquiWinColors.current.subtle,
             )
         }
-        if (state.edit != null) EditBar(onDone = viewModel::exitEdit, modifier = Modifier.align(Alignment.BottomCenter))
+        if (state.edit != null) EditBar(onDone = viewModel::exitEdit, modifier = Modifier.align(Alignment.BottomCenter).then(underList))
+        if (hiddenChats.isNotEmpty()) {
+            // Composed after edit mode's, so Back closes the list first.
+            BackHandler { controller.hiddenChatsOf = null }
+            HiddenChatsList(hiddenChats, onShowAgain = viewModel::showAgain, onClose = { controller.hiddenChatsOf = null })
+        }
     }
 }
 
@@ -477,7 +490,12 @@ private fun TileSlot(
             face = drawn, unread = unread, liveTilesPaused = liveTilesPaused,
         )
         if (selected && controller.drag == null) {
-            EditControls(metrics.sizeDp(tile.size), onUnpin = { controller.unpin(tile.id) }, onResize = { controller.resize(tile.id) })
+            EditControls(
+                metrics.sizeDp(tile.size),
+                onUnpin = { controller.unpin(tile.id) },
+                onResize = { controller.resize(tile.id) },
+                onHiddenChats = if (live?.hiddenChats.isNullOrEmpty()) null else ({ controller.hiddenChatsOf = tile.id }),
+            )
         }
     }
 }
@@ -523,6 +541,7 @@ private class TileDrag(val id: Long, val size: TileSize, topLeft: Offset) {
 private class StartController(private val viewModel: StartViewModel) {
     var drag by mutableStateOf<TileDrag?>(null)
         private set
+    var hiddenChatsOf by mutableStateOf<Long?>(null) // the tile whose hidden chats list is open
     var viewport: LayoutCoordinates? = null
 
     // One ticker for the screen's life, and every tile on the grid.

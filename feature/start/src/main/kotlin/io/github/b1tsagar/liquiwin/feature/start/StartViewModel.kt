@@ -13,6 +13,7 @@ import io.github.b1tsagar.liquiwin.core.tiles.model.Tile
 import io.github.b1tsagar.liquiwin.core.tiles.model.TileKind
 import io.github.b1tsagar.liquiwin.core.tiles.model.TilePlacement
 import io.github.b1tsagar.liquiwin.core.tiles.model.TileSize
+import io.github.b1tsagar.liquiwin.core.tiles.source.HiddenChat
 import io.github.b1tsagar.liquiwin.core.tiles.source.SourceRegistry
 import io.github.b1tsagar.liquiwin.core.tiles.source.TileItem
 import io.github.b1tsagar.liquiwin.core.tiles.source.TileState
@@ -186,6 +187,11 @@ class StartViewModel(
                 else -> catalog.launch(key, sourceBounds, options)
             }
         }
+    }
+
+    /** Puts [chat] back on tiles (§5.8). */
+    fun showAgain(chat: HiddenChat) {
+        viewModelScope.launch { sources.source(chat.sourceId)?.showAgain(chat.conversationKey) }
     }
 
     private suspend fun repairArrangement() = mutex.withLock {

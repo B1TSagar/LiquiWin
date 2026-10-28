@@ -28,11 +28,15 @@ import io.github.b1tsagar.liquiwin.core.design.theme.LocalLiquiWinColors
 import io.github.b1tsagar.liquiwin.core.design.theme.LocalLiquiWinType
 import io.github.b1tsagar.liquiwin.core.design.theme.LocalWpUnits
 
-/** Unpin on the selected tile's top-right corner and resize on its bottom-right, each centred on the corner. */
+/**
+ * Unpin on the selected tile's top-right corner and resize on its bottom-right, each centred on the corner. With
+ * [onHiddenChats], hidden chats sits on its bottom-left (§4.3).
+ */
 @Composable
-internal fun EditControls(tileSize: DpSize, onUnpin: () -> Unit, onResize: () -> Unit) {
+internal fun EditControls(tileSize: DpSize, onUnpin: () -> Unit, onResize: () -> Unit, onHiddenChats: (() -> Unit)? = null) {
     CornerButton(LiquiWinIcons.PinOff, "unpin", onUnpin, Modifier.offset(tileSize.width - 24.dp, (-24).dp))
     CornerButton(LiquiWinIcons.Resize, "resize", onResize, Modifier.offset(tileSize.width - 24.dp, tileSize.height - 24.dp))
+    if (onHiddenChats != null) CornerButton(LiquiWinIcons.ChatOff, "hidden chats", onHiddenChats, Modifier.offset((-24).dp, tileSize.height - 24.dp))
 }
 
 // A 32 dp white circle with a black glyph inside a 48 dp touch target.

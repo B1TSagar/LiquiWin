@@ -5,10 +5,12 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
@@ -18,6 +20,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performCustomAccessibilityActionWithLabel
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.unit.dp
@@ -34,6 +37,7 @@ import io.github.b1tsagar.liquiwin.core.testing.testItem
 import io.github.b1tsagar.liquiwin.core.tiles.model.SourceId
 import io.github.b1tsagar.liquiwin.core.tiles.model.TilePlacement
 import io.github.b1tsagar.liquiwin.core.tiles.model.TileSize
+import io.github.b1tsagar.liquiwin.core.tiles.source.HiddenChat
 import io.github.b1tsagar.liquiwin.core.tiles.source.SourceRegistry
 import io.github.b1tsagar.liquiwin.core.tiles.source.TileItem
 import kotlinx.coroutines.flow.first
@@ -209,5 +213,26 @@ class StartScreenTest {
         show(pinned = listOf(camera))
         compose.onNodeWithTag("tile-1").performCustomAccessibilityActionWithLabel("chat with Alex")
         assertEquals(listOf(a), chats)
+    }
+
+    // §4.3 and §5.8; Review Focus 5
+    @Test fun aTileWithHiddenChatsListsThemAndShowsThemAgain() {
+        cameraSource.hiddenState.value = listOf(HiddenChat(cameraSource.id, "family", "Family"))
+        show(pinned = listOf(camera, maps))
+        compose.onNodeWithTag("tile-2").performTouchInput { longClick() }
+        compose.onNodeWithContentDescription("hidden chats").assertDoesNotExist() // Maps has none
+        compose.onNodeWithTag("tile-1").performClick()
+        compose.onNodeWithContentDescription("hidden chats").performClick()
+        compose.onNodeWithText("Family").assertIsDisplayed()
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() } // the list goes, edit mode stays
+        compose.onNodeWithText("Family").assertDoesNotExist()
+        compose.onNodeWithContentDescription("hidden chats").performClick()
+        compose.onNodeWithContentDescription("close").performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithText("Family").assertDoesNotExist()
+        compose.onNodeWithContentDescription("hidden chats").performClick()
+        compose.onNodeWithText("show again").performClick()
+        assertEquals(emptyList<HiddenChat>(), cameraSource.hiddenState.value)
+        compose.onNodeWithText("Family").assertDoesNotExist()
+        compose.onNodeWithContentDescription("hidden chats").assertDoesNotExist()
     }
 }

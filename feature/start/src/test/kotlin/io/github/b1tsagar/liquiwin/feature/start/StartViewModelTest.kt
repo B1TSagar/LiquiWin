@@ -12,6 +12,7 @@ import io.github.b1tsagar.liquiwin.core.testing.testItem
 import io.github.b1tsagar.liquiwin.core.tiles.model.SourceId
 import io.github.b1tsagar.liquiwin.core.tiles.model.TilePlacement
 import io.github.b1tsagar.liquiwin.core.tiles.model.TileSize
+import io.github.b1tsagar.liquiwin.core.tiles.source.HiddenChat
 import io.github.b1tsagar.liquiwin.core.tiles.source.SourceRegistry
 import io.github.b1tsagar.liquiwin.core.tiles.source.TileItem
 import io.github.b1tsagar.liquiwin.feature.start.layout.Cell
@@ -131,5 +132,14 @@ class StartViewModelTest {
         chatViewModel().open(1, null, null)
         assertEquals(listOf(chat.key), chatCatalog.launched)
         assertEquals(emptyList<TileItem?>(), chatSource.opened)
+    }
+
+    @Test fun showAgainAsksTheChatsSource() = runTest {
+        val source = FakeTileSource(SourceId.forApp("com.example.chat", 0))
+        val family = HiddenChat(source.id, "family", "Family")
+        source.hiddenState.value = listOf(family)
+        val viewModel = StartViewModel(store, catalog, gridWidth = 6, SourceRegistry { if (it == source.id) source else null })
+        viewModel.showAgain(family)
+        assertEquals(emptyList<HiddenChat>(), source.hiddenState.value)
     }
 }

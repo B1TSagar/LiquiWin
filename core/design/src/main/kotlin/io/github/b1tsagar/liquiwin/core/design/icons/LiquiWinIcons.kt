@@ -1,15 +1,16 @@
 package io.github.b1tsagar.liquiwin.core.design.icons
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.unit.dp
 
 /**
- * Paths from Microsoft's Fluent UI System Icons (24 px, regular), used under the MIT licence, except Pause and Chat,
- * two plain bars and a plain speech bubble drawn here. Copyright (c) 2020 Microsoft Corporation. The full notice ships
- * in assets/licenses/fluent-system-icons-MIT.txt.
+ * Paths from Microsoft's Fluent UI System Icons (24 px, regular), used under the MIT licence, except Pause, Chat and
+ * ChatOff, two plain bars, a plain speech bubble and that bubble struck through, drawn here. Copyright (c) 2020
+ * Microsoft Corporation. The full notice ships in assets/licenses/fluent-system-icons-MIT.txt.
  */
 object LiquiWinIcons {
     val Search: ImageVector = icon(
@@ -35,6 +36,9 @@ object LiquiWinIcons {
     val Pause: ImageVector = icon("Pause", "M6 4h4v16H6zM14 4h4v16h-4z")
     val Chat: ImageVector = icon("Chat", "M2 3h20v14H9l-5 4v-4H2z")
 
-    private fun icon(name: String, d: String): ImageVector =
-        ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f).addPath(addPathNodes(d), fill = SolidColor(Color.White)).build()
+    // Even-odd, so the slash cuts through the bubble.
+    val ChatOff: ImageVector = icon("ChatOff", "M2 3h20v14H9l-5 4v-4H2zM1.3 3.4l1.4-1.4 20 20-1.4 1.4z", PathFillType.EvenOdd)
+
+    private fun icon(name: String, d: String, fillType: PathFillType = PathFillType.NonZero): ImageVector =
+        ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f).addPath(addPathNodes(d), pathFillType = fillType, fill = SolidColor(Color.White)).build()
 }
