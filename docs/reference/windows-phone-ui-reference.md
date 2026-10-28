@@ -104,5 +104,5 @@ Checked on the Galaxy S24 (1080 × 2340 px, 411 dp wide). WP px are 1/480 of the
 - **App list headers:** a 56 WP px square outlined in the accent colour (2 dp), with the lowercase letter at 32 WP px in its bottom-left corner. The letter grid has four columns of accent squares; letters with no apps are dark grey.
 - **Chrome:** `#1F1F1F`, for the search box, the edit bar and the Home banner.
 - **Edit mode:** unpin at the tile's top-right corner and resize at its bottom-right, each a 32 dp white circle with an 18 dp black glyph in a 48 dp touch target. The edit bar is 72 WP px of chrome above the navigation bar, holding **done** as a 48 WP px white ring.
-- **Tilt:** up to 0.3 rad toward the finger, with a depression scale of 0.025, so a press at the centre shrinks the tile by 2.5%. It springs back 200 ms after release, over 100 ms.
+- **Tilt:** the edge under the finger sinks, by up to 0.3 rad, and the depression scale is 0.025, so a press at the centre shrinks the tile by 2.5%. The tile returns 200 ms after release, linearly over 100 ms.
 - **Changed during the Galaxy check:** a tile that shrinks re-flows the tiles after it, so they fill the space it frees, even across columns (spec §4.2). Search keeps the spec's ranking: "wa" lists WhatsApp, below apps whose names start with "wa".
