@@ -39,7 +39,7 @@ All checked on the owner's Galaxy:
 
 1. LiquiWin can be set as the Home app and is used daily. Pressing Home shows the start screen within 300 ms when the launcher is already running, and within 1.5 s from cold.
 2. A "Social" tile fed by Instagram, WhatsApp and Snapchat shows a new WhatsApp message (sender and text) within 1 s of its arrival, with a combined unread count.
-3. Tapping that update opens WhatsApp at that chat. Tapping the tile's label strip opens the hub page. The reply button sends a real reply that appears in WhatsApp.
+3. Tapping that update opens WhatsApp at that chat. Tapping the tile's label strip opens the hub page. Its chat button opens a window that sends a real reply, which appears in WhatsApp.
 4. All five presets can be applied, and every style setting can be mixed freely. Switching column counts never scrambles a saved arrangement.
 5. The app list (three styles), universal search, live folders, widgets in tiles and the Action Center panel work as specified.
 6. First-time setup takes a new user from install to a live start screen.
@@ -168,11 +168,12 @@ interface SearchProvider {
 | `tile_placement` | `tileId`, `gridWidth` (4, 6 or 8 units), `x`, `y`. One row per tile per grid width that has been arranged. |
 | `notification_item` | `key`, `sourceId`, `conversationKey`, `sender`, `text`, avatar file, image file, `postedAt`, `removedAt`, `readAt`, `isSelf`. Keeps 50 items per app and 24 hours by default. |
 | `conversation_read` | `sourceId`, `conversationKey`, `lastReadAt` |
+| `hidden_conversation` | `sourceId`, `conversationKey`, `name`, `hiddenAt`. Chats hidden from tiles (§5.8), kept until shown again. |
 
 **Other storage:**
 - Style settings, onboarding progress and per-feature settings live in DataStore.
 - Avatars are downscaled to at most 256 px and photos to at most 720 px. They're stored in an app-private cache and deleted with their items.
-- Android Auto Backup includes the tile tables and DataStore. It excludes `notification_item`, `conversation_read` and the image cache.
+- Android Auto Backup includes the tile tables and DataStore. It excludes `notification_item`, `conversation_read`, `hidden_conversation` and the image cache.
 - Auto Backup works on whole files, so the tables live in two Room databases. `layout.db` holds the tile tables and is backed up. `cache.db` holds the notification tables and the cached app list, and isn't.
 
 ### 3.4 Data flow
@@ -267,6 +268,7 @@ The status bar's "hidden until tapped" option hides Android's status bar on the 
   - top-left: tile editor (§4.4)
   - top-right: unpin
   - bottom-right: resize, cycling small → medium → wide → large and skipping sizes the tile can't take (§6.4)
+  - bottom-left: **hidden chats**, only on a tile whose sources have chats hidden from tiles (§5.8)
 - Bottom bar: **widget**, **new tile** (a blank combined tile), **style**, **done**. Back, or a tap on empty space, also leaves edit mode.
 - Settings → start screen → **lock layout** disables edit mode.
 
@@ -347,7 +349,7 @@ A single tile can still be overridden back to flat solid. Glass-only facets (tin
 | Resize | The growing edge bulges outward and a shrinking edge dips inward, then both settle |
 | Drag | The tile stretches along the drag velocity, and neighbours dent as it nears them. Hovering over a tile makes the two pieces of glass neck together; dropping merges them into a folder. |
 | Folder open or close | The folder's glass pours down into the band below it and flows back up |
-| Quick reply | The reply button's droplet expands into the window. On send or close, the window flows back into the tile. |
+| Chat window | The chat button's droplet expands into the window (§5.7). When it closes, the window flows back into the tile. |
 | Action Center | The sheet pours down from the top with a curved leading edge and retracts upward |
 | New notification | A refraction ripple crosses the tile, and the count bubble drips out of the corner |
 | Count cleared | The bubble is reabsorbed |
@@ -386,15 +388,17 @@ A single tile can still be overridden back to flat solid. Glass-only facets (tin
 | Small | None. Only the count changes. |
 | Medium | Avatar, sender, 2 lines of text |
 | Wide | Avatar, sender, 3 lines, or the item's photo with a caption |
-| Large | The three newest items stacked, each with its own tap area and reply button |
+| Large | The three newest items stacked, each with its own tap area and chat button |
 
 On a combined tile, each content face also shows the item's app icon at top right.
+
+**Chat button.** Each item on a content face has a speech-bubble chat button at its bottom right, with a 48 dp touch area. It opens the item's chat window (§5.7), whether or not the app takes replies. On a large tile, each of the three rows has its own. (The owner's call after stage 2 part 1.)
 
 **Templates.** New tiles default to `FLIP`.
 
 | Template | Behaviour |
 |---|---|
-| `FLIP` | Rotates 180° around the horizontal axis between faces |
+| `FLIP` | Rotates the whole tile 180° around the horizontal axis between faces, seen from far enough away that, at any point in the turn, its nearer edge looks at most 5% wider than its farther edge. (The owner's call after stage 2 part 1: the first build's flip looked too strong.) |
 | `PEEK` | The content face slides up over the front face, then back |
 | `CYCLE` | Photos crossfade; items without a photo fall back to `FLIP` |
 | `ICONIC` | No motion. Shows the front face; wide and large tiles list the latest lines. |
@@ -427,10 +431,12 @@ On a combined tile, each content face also shows the item's app icon at top righ
 ### 5.3 Rotation, unread and read
 
 - **Rotation.** A tile's rotation is its unread items, newest first, up to 5. With "keep read items for 24 h" on, read items follow the unread ones. If the rotation is empty, the tile shows its front face.
+- **Hidden chats** (§5.8) are left out of the rotation and the unread count.
 - **Unread.** A MessagingStyle message counts as unread if it's newer than its conversation's `lastReadAt`. Any other notification counts as 1 while it's present and its `readAt` is empty.
 - **An item becomes read when:**
   - its notification is removed, because it was opened or swiped away elsewhere
   - the user opens it from a tile, the hub or the Action Center, which sets `lastReadAt`
+  - the user opens its chat window (§5.7)
   - the user taps **mark all read** in the hub
 - **Read state is local.** LiquiWin never triggers apps' own mark-as-read actions, because they would send read receipts.
 
@@ -449,7 +455,7 @@ Tiles animate the way Windows Phone's did: a single timer for the whole start sc
 | Where | Single-app tile | Combined tile |
 |---|---|---|
 | Content face body | Open that item | Open that item |
-| Reply button | Quick reply | Quick reply |
+| Chat button | Its chat window (§5.7) | Its chat window (§5.7) |
 | Label strip, or anywhere on the front face | Open the app | Open the hub page |
 | Small tile | Open the app | Open the hub page |
 | Long-press | Edit mode | Edit mode |
@@ -466,23 +472,34 @@ Opening an item marks it read.
 
 - A pivot page titled with the tile's name.
 - **Tabs:** "all", then one per source, ordered by latest activity, each showing its unread count.
-- **Rows:** avatar, sender, preview, time, the app icon (on "all"), and the reply button when available.
+- **Rows:** avatar, sender, preview, time, the app icon (on "all"), and the chat button (§5.7).
 - **Tap** opens the item using the fallback in §5.5.
 - **Swipe** dismisses the row locally and cancels the Android notification (`cancelNotification(key)`).
 - **App bar:** mark all read, open the app (on an app tab), edit tile.
 - History covers the retention window, 24 h by default.
 
-### 5.7 Quick reply
+### 5.7 Chat window and quick reply
 
-- **When it shows.** The reply button appears only when `canReply` is true. After a launcher restart, it comes back once the app posts its notification again.
-- **The window.** An overlay inside the launcher, anchored above the keyboard, in the style of Windows Phone Messaging. It opens with the swivel animation and contains:
-  - a header with avatar, name, app icon and **open in app**
-  - bubbles for the conversation's known messages: incoming in the accent colour with a top-left tail, yours in a darker shade with a bottom-right tail
-  - a text box that's already focused, with the keyboard showing
-  - a send button
-- **Sending.** LiquiWin fills the action's `RemoteInput` (`RemoteInput.addResultsToIntent`, source set to free-form input) and sends its `PendingIntent`. Your bubble appears straight away and is replaced when the app re-posts the conversation including your message.
-- **If sending fails** (`PendingIntent.CanceledException`): the text is kept, and the window shows "Couldn't send. Open \<app\> to reply." with an open button.
-- **Where it's reachable:** tile content faces, hub rows and Action Center notifications.
+Every item opens its chat, not only items that take replies, and the window is where a message too long for its tile is read in full. (The owner's calls after stage 2 part 1.)
+
+- **Opening.** An item's chat button opens it: on tile content faces (§5.1), hub rows and Action Center notifications. It shows that item's chat, meaning its `sourceId` and `conversationKey`.
+- **The window.** An overlay inside the launcher, anchored above the keyboard, in the style of Windows Phone Messaging. It opens with the swivel animation, and Back or a tap outside it closes it. It contains:
+  - a header with the avatar, name and app icon, and two text buttons: **open in app** and **hide this chat** (§5.8)
+  - bubbles for the chat's stored messages, oldest at the top: incoming in the accent colour with a top-left tail, yours in a darker shade with a bottom-right tail. In a group, the sender's name sits above each incoming bubble. Each bubble has its time under it, and a photo shows inside its bubble. The window opens scrolled to the newest.
+  - a scrollbar: whenever the bubbles are taller than their space, a thin bar along the right edge shows, by its length and position, which part is in view
+  - when `canReply` is true, a text box that's already focused, with the keyboard showing, and a send button. Otherwise there's no text box, and the header's **open in app** is the way to reply. After a launcher restart, replying comes back once the app posts its notification again.
+- **Sending.** Only on the send button. LiquiWin fills the action's `RemoteInput` (`RemoteInput.addResultsToIntent`, source set to free-form input) and sends its `PendingIntent`. Your bubble appears straight away, marked "sending…", and is replaced when the app re-posts the conversation including your message. The window stays open, so you can send another.
+- **If sending fails** (`PendingIntent.CanceledException`, or the reply action has gone since the window opened): the text is kept, and the window shows "Couldn't send. Open \<app\> to reply." with an open button.
+- **Read.** Opening the window marks the chat read (§5.3), in LiquiWin only, so no read receipt is sent.
+
+### 5.8 Hidden chats
+
+(The owner's call after stage 2 part 1.)
+
+- **Hiding.** **hide this chat** in the chat window hides that chat, a group or a one-to-one conversation, from every tile and its hub page. Its items leave the rotation and the unread count straight away, and the window closes. The Action Center, which lists Android's own notifications, still shows it. Its messages are still stored under the usual retention (§3.3).
+- **Showing again.** In edit mode, a tile whose sources have hidden chats gets a **hidden chats** corner button (§4.3). It lists them by name, each with **show again**. A chat shown again comes back with whatever of its messages are still stored.
+- **Storage.** `hidden_conversation` in `cache.db` (§3.3), which isn't backed up, because a chat's key can be a phone number. The name listed is the chat's title, or the sender's name for a one-to-one chat, as it was when hidden. If `cache.db` is ever rebuilt after a failed migration, hidden chats show again.
+- Whole apps are hidden with the ignore list in settings (§7.2).
 
 ---
 
@@ -560,7 +577,7 @@ Opening an item marks it read.
   - Tap to open it.
   - Swipe right to dismiss it, which also cancels it in Android.
   - **Clear all** clears the clearable ones.
-  - The reply button appears where available.
+  - Each has the chat button (§5.7).
 
 ---
 
@@ -661,12 +678,12 @@ The standard Windows Phone settings list: each entry shows a title with its curr
   - Normaliser: run against fixture notifications from WhatsApp, Instagram, Snapchat, Messenger, Telegram and Gmail. The fixtures are recorded once on the owner's Galaxy with a debug-only capture screen, which strips names and text before saving.
   - Unread counting and dedupe, the tap fallback chain, the animation timer (one tile per tick, the 3-tick rest, new items jumping the queue), search ranking, and facet/preset resolution (including when the label switches to "Custom").
 - **Database tests:** Room DAO tests and a migration test for every schema version.
-- **Screenshot tests** (Roborazzi): every flat preset in light and dark × every tile size × every template, the hub, quick reply, the app list styles and the Action Center layouts, plus app names in Devanagari and Cyrillic to check the font fallback. A change to one style can't silently break another.
+- **Screenshot tests** (Roborazzi): every flat preset in light and dark × every tile size × every template, the hub, the chat window, the app list styles and the Action Center layouts, plus app names in Devanagari and Cyrillic to check the font fallback. A change to one style can't silently break another.
 - **Glass tests:** shaders need a GPU, which JVM screenshot tests don't have.
   - Instrumented screenshot tests run the Glass preset on an Android 14+ emulator with GPU rendering, and the results are reviewed on the Galaxy.
   - The morph state machine (which elements merge, spring targets, hit-test positions) and the signed-distance geometry are unit-tested on the JVM.
   - Macrobenchmark runs the Glass preset separately, covering scrolling plus pin and unpin morphs.
-- **Compose UI tests:** edit mode (move, resize, unpin, making a folder), the tile editor, hub tabs and swipe, quick reply (focus and the keyboard appearing, sending, the failure state), and first-time setup.
+- **Compose UI tests:** edit mode (move, resize, unpin, making a folder), the tile editor, hub tabs and swipe, the chat window (focus and the keyboard appearing, sending, the failure state, a chat that takes no replies, the scrollbar), hiding a chat and showing it again, and first-time setup.
 - **`:tools:notifier`:** a debug app that posts WhatsApp-like and Instagram-like MessagingStyle notifications, with reply actions that echo the reply back. It allows end-to-end tests of tiles and quick reply on the emulator without real accounts.
 - **Macrobenchmark:** cold and warm start, start screen scroll jank, and a Baseline Profile.
 - **Manual checklist on the Galaxy:**
@@ -674,7 +691,7 @@ The standard Windows Phone settings list: each entry shows a title with its curr
   - granting and revoking notification access
   - a day under battery management with the sleeping-apps settings
   - real messages and quick replies in WhatsApp, Instagram, Messenger and Telegram
-  - Snapchat updates (open the app, no reply button expected)
+  - Snapchat updates (open the app; their chat window has no text box)
   - Samsung widgets
   - a work profile (apps in Samsung's Secure Folder are invisible to all third-party launchers, which is expected)
   - Settings panels (Wi-Fi, internet, volume) on One UI
