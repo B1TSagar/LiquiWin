@@ -163,11 +163,21 @@ fun AppListScreen(
     }
     val labels = remember(state.index) { state.index.sections.map { it.label } }
     val jumpTo: (String) -> Unit = { label -> headerItems[label]?.let { scope.launch { listState.scrollToItem(it) } } }
+    // Scrubbing replays the list's feather-in at every letter it reaches, counted from that letter's header.
+    val scrubTo: (String) -> Unit = { label ->
+        headerItems[label]?.let { header ->
+            scope.launch {
+                listState.scrollToItem(header)
+                flipFirst = header
+                flip.play(Turnstile.IN, listState.layoutInfo.visibleItemsInfo.size - 1)
+            }
+        }
+    }
     val side = units.dp(LocalStyleFacets.current.sideMarginWpPx)
     val bars = WindowInsets.systemBars.asPaddingValues()
     val dim = if (menu != null) 0.4f else 1f
 
-    LetterScrubber(labels, enabled = menu == null && !letterGridOpen, onLetter = jumpTo, modifier = modifier.fillMaxSize().onPlaced { screen.value = it }) {
+    LetterScrubber(labels, enabled = menu == null && !letterGridOpen, onLetter = scrubTo, modifier = modifier.fillMaxSize().onPlaced { screen.value = it }) {
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),

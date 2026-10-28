@@ -46,28 +46,24 @@ fun turnstileProgress(motion: Turnstile, elapsedMs: Float, index: Int): Float {
 class TurnstileClock(hiddenFor: Turnstile? = null) {
     var motion: Turnstile? by mutableStateOf(hiddenFor)
         private set
-    var isPlaying by mutableStateOf(false)
-        private set
     private var done by mutableStateOf(false)
     private val clock = Animatable(0f)
 
     /** Milliseconds into [motion], infinite once it's done. Read it when drawing. */
     val elapsedMs: Float get() = if (done) Float.POSITIVE_INFINITY else clock.value
 
-    /** Plays [motion] until item [last] is done. In-motions leave the items at rest; [Turnstile.OUT] leaves them gone. */
+    /**
+     * Plays [motion] until item [last] is done. In-motions leave the items at rest; [Turnstile.OUT] leaves them gone.
+     * Starting another motion stops this one where it is.
+     */
     suspend fun play(motion: Turnstile, last: Int) {
         clock.snapTo(0f)
         this.motion = motion
         done = false
-        isPlaying = true
-        try {
-            val end = motion.totalMs(last)
-            clock.animateTo(end.toFloat(), tween(end, easing = LinearEasing))
-            done = true
-            if (motion != Turnstile.OUT) this.motion = null
-        } finally {
-            isPlaying = false
-        }
+        val end = motion.totalMs(last)
+        clock.animateTo(end.toFloat(), tween(end, easing = LinearEasing))
+        done = true
+        if (motion != Turnstile.OUT) this.motion = null
     }
 
     /**
@@ -79,13 +75,8 @@ class TurnstileClock(hiddenFor: Turnstile? = null) {
         clock.snapTo(end.toFloat())
         this.motion = motion
         done = false
-        isPlaying = true
-        try {
-            clock.animateTo(0f, tween(end, easing = LinearEasing))
-            if (motion == Turnstile.OUT) this.motion = null
-        } finally {
-            isPlaying = false
-        }
+        clock.animateTo(0f, tween(end, easing = LinearEasing))
+        if (motion == Turnstile.OUT) this.motion = null
     }
 
     /** Hides the items until [motion], an in-motion, plays. */
