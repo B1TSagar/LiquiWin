@@ -2,6 +2,7 @@ package io.github.b1tsagar.liquiwin.feature.start
 
 import android.app.ActivityOptions
 import android.graphics.Rect
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -31,6 +32,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
@@ -43,10 +45,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.toRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -70,10 +74,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
+import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.currentStateAsState
 import io.github.b1tsagar.liquiwin.core.data.apps.AppIcon
 import io.github.b1tsagar.liquiwin.core.data.apps.LauncherApp
 import io.github.b1tsagar.liquiwin.core.design.components.WpText
@@ -86,12 +93,23 @@ import io.github.b1tsagar.liquiwin.core.design.theme.LocalLiquiWinColors
 import io.github.b1tsagar.liquiwin.core.design.theme.LocalLiquiWinType
 import io.github.b1tsagar.liquiwin.core.design.theme.LocalWpUnits
 import io.github.b1tsagar.liquiwin.core.tiles.model.TileSize
+import io.github.b1tsagar.liquiwin.core.tiles.source.TileItem
 import io.github.b1tsagar.liquiwin.core.tiles.source.TileState
 import io.github.b1tsagar.liquiwin.feature.start.layout.Cell
+import io.github.b1tsagar.liquiwin.feature.start.live.TileFace
+import io.github.b1tsagar.liquiwin.feature.start.live.TileFlipState
+import io.github.b1tsagar.liquiwin.feature.start.live.TileTicker
+import io.github.b1tsagar.liquiwin.feature.start.live.faces
+import io.github.b1tsagar.liquiwin.feature.start.live.nextFace
 import kotlin.math.roundToInt
+import kotlin.random.Random
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -103,7 +121,9 @@ private const val EMPTY_HINT = "swipe left for your apps. long-press one and cho
  * selects a tile, the selected tile moves with a drag, and any other tile moves after a long-press, so a swipe on it
  * still scrolls. When [shown] turns false the tiles turnstile away and then [onHidden] is called. The tiles come back by
  * playing their exit backwards, once start is shown again and LiquiWin is [onScreen], fully back from another app.
- * Each tile shows its unread count, or a pause mark while [liveTilesPaused].
+ * Each tile shows its unread count, or a pause mark while [liveTilesPaused]. While start is shown, on screen and resumed,
+ * outside edit mode and with animations on, the tiles on screen flip through their items one at a time, and a new item
+ * flips its tile straight away. With animations off each tile shows the face after its front.
  */
 @Composable
 fun StartScreen(
@@ -171,6 +191,23 @@ fun StartScreen(
     val editing by rememberUpdatedState(state.edit != null)
     BackHandler(enabled = state.edit != null) { viewModel.exitEdit() }
 
+    // Live tiles move only while they can be seen: start shown and on screen, LiquiWin resumed, outside edit mode, not
+    // paused, and with Android's animations on, which is read again on every resume.
+    val lifecycleState by lifecycle.currentStateAsState()
+    fun animatorOn() = Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) != 0f
+    var animationsOn by remember { mutableStateOf(animatorOn()) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { animationsOn = animatorOn() }
+    val moving = shown && onScreen && lifecycleState.isAtLeast(Lifecycle.State.RESUMED) && state.edit == null &&
+        !liveTilesPaused && animationsOn
+    LaunchedEffect(moving) {
+        if (!moving) return@LaunchedEffect
+        delay(TileTicker.FIRST_TICK_MS)
+        while (true) {
+            controller.tickLive()
+            delay(controller.ticker.nextGapMs())
+        }
+    }
+
     // A hover cell held for 150 ms previews the move.
     val drag = controller.drag
     val hover by remember(controller) { derivedStateOf { controller.drag?.let(controller::hoverCell) } }
@@ -212,7 +249,7 @@ fun StartScreen(
                 .padding(bottom = units.dp(96f)),
         ) {
             banner()
-            TileGrid(state, metrics, sidePx, stepPx, controller, icon, flip, tapped, live, liveTilesPaused)
+            TileGrid(state, metrics, sidePx, stepPx, controller, icon, flip, tapped, live, liveTilesPaused, moving, animationsOn)
         }
         if (state.loaded && state.tiles.isEmpty()) {
             WpText(
@@ -239,6 +276,8 @@ private fun TileGrid(
     tapped: Long?,
     live: Map<Long, TileState>,
     liveTilesPaused: Boolean,
+    moving: Boolean,
+    animationsOn: Boolean,
 ) {
     val cells = state.tiles.associate { it.id to (state.edit?.preview?.get(it.id) ?: it.cell) }
     val rows = state.tiles.maxOfOrNull { cells.getValue(it.id).y + it.size.heightUnits } ?: 0
@@ -251,7 +290,10 @@ private fun TileGrid(
                 val cell = cells.getValue(tile.id)
                 val widthPx = with(density) { metrics.sizeDp(tile.size).width.toPx() }
                 val pivotX = (hingePx - (sidePx + cell.x * stepPx)) / widthPx
-                TileSlot(tile, cell, metrics, sidePx, stepPx, state.edit, controller, icon, flip, turns.getValue(tile.id), pivotX, live[tile.id], liveTilesPaused)
+                TileSlot(
+                    tile, cell, metrics, sidePx, stepPx, state.edit, controller, icon, flip, turns.getValue(tile.id), pivotX,
+                    live[tile.id], liveTilesPaused, moving, animationsOn,
+                )
             }
         },
         modifier = Modifier.fillMaxWidth().height(if (rows == 0) 0.dp else (rows * metrics.stepDp - metrics.gapDp).dp),
@@ -276,6 +318,8 @@ private fun TileSlot(
     pivotX: Float,
     live: TileState?,
     liveTilesPaused: Boolean,
+    moving: Boolean,
+    animationsOn: Boolean,
 ) {
     val unread = live?.unread ?: 0
     val targetPx = Offset(sidePx + target.x * stepPx, target.y * stepPx)
@@ -292,6 +336,49 @@ private fun TileSlot(
     val editing by rememberUpdatedState(edit != null)
     val selectedNow by rememberUpdatedState(selected)
     val coords = remember { CoordinatesRef() }
+
+    // The face showing: the front while paused, the face after the front with animations off, otherwise the live face.
+    val tileFaces = faces(tile.size, live?.rotation.orEmpty())
+    val liveFace = remember { TileFlipState(TileFace.Front.key) }
+    val still = liveTilesPaused || !animationsOn
+    val face = when {
+        liveTilesPaused -> TileFace.Front
+        !animationsOn -> tileFaces.getOrElse(1) { TileFace.Front }
+        else -> tileFaces.firstOrNull { it.key == liveFace.face } ?: TileFace.Front
+    }
+    // A flip draws the old face until it's edge-on at 90°.
+    val firstHalf by remember { derivedStateOf { liveFace.from != null && liveFace.angle < 90f } }
+    val drawn = if (!still && firstHalf) tileFaces.firstOrNull { it.key == liveFace.from } ?: TileFace.Front else face
+    val lines = face.shownItems.map { listOfNotNull(it.title, it.text).joinToString(": ") }
+    val said = if (liveTilesPaused) "live tile paused" else (listOfNotNull("$unread unread".takeIf { unread > 0 }) + lines).joinToString(", ").ifEmpty { null }
+
+    // The timer reaches the tile through the controller. A face that has gone, such as a read item's, gives way to the
+    // front without a flip.
+    val currentFaces by rememberUpdatedState(tileFaces)
+    DisposableEffect(tile.id) {
+        controller.liveSlots[tile.id] = LiveSlot(liveFace, coords) { currentFaces }
+        onDispose { controller.liveSlots.remove(tile.id) }
+    }
+    LaunchedEffect(tileFaces) { if (tileFaces.none { it.key == liveFace.face }) liveFace.snapTo(TileFace.Front.key) }
+
+    // A new item flips its tile to it straight away, if the tile is on screen while tiles move. Jumps on one tile wait
+    // for the ticker's debounce, and newer items replace any still waiting.
+    val currentLive by rememberUpdatedState(live)
+    val seen = remember { SeenRef() }
+    LaunchedEffect(moving) {
+        snapshotFlow { currentLive }.filterNotNull()
+            .mapNotNull(seen::newest)
+            .filter { moving && controller.isShowing(coords.value) }
+            .conflate()
+            .collect { item ->
+                delay(controller.ticker.jumpDelayMs(tile.id, withFrameMillis { it }))
+                val to = currentFaces.firstOrNull { f -> f.shownItems.any { it.key == item.key } }
+                if (to == null || to.key == liveFace.face) return@collect
+                controller.ticker.jumped(tile.id, withFrameMillis { it })
+                liveFace.flipTo(to.key)
+            }
+    }
+
     Box(
         Modifier
             .zIndex(if (selected) 1f else 0f)
@@ -301,11 +388,13 @@ private fun TileSlot(
                 scaleX = scale
                 scaleY = scale
                 alpha = dim * if (tile.isPaused) 0.4f else 1f
+                // The old face turns from 0° to 90°, then the new one from -90° to 0°.
+                if (!still && liveFace.from != null) rotationX = liveFace.angle.let { if (it < 90f) it else it - 180f }
             }
             .testTag("tile-${tile.id}")
             .semantics {
                 contentDescription = tile.label
-                if (liveTilesPaused) stateDescription = "live tile paused" else if (unread > 0) stateDescription = "$unread unread"
+                said?.let { stateDescription = it }
                 onClick { controller.tap(current, coords.value, editing); true }
                 onLongClick { controller.longPress(current); true }
             }
@@ -352,7 +441,7 @@ private fun TileSlot(
     ) {
         StartTileView(
             tile, metrics, icon, Modifier.clearAndSetSemantics {}.tilt(enabled = edit == null),
-            unread = unread, liveTilesPaused = liveTilesPaused,
+            face = drawn, unread = unread, liveTilesPaused = liveTilesPaused,
         )
         if (selected && controller.drag == null) {
             EditControls(metrics.sizeDp(tile.size), onUnpin = { controller.unpin(tile.id) }, onResize = { controller.resize(tile.id) })
@@ -368,17 +457,58 @@ private class JobRef {
     var value: Job? = null
 }
 
+// The keys of a tile's last rotation, null until its first live state: the baseline.
+private class SeenRef {
+    private var keys: Set<String>? = null
+
+    /** [state]'s newest item if it's new, not in the last rotation. [state] becomes the last rotation. */
+    fun newest(state: TileState): TileItem? {
+        val before = keys
+        keys = state.rotation.mapTo(HashSet()) { it.key }
+        return state.rotation.firstOrNull()?.takeIf { before != null && it.key !in before }
+    }
+}
+
+/** A tile as the live tiles' timer sees it: its face, where it is, and the faces it has now. */
+private class LiveSlot(val face: TileFlipState, val coords: CoordinatesRef, val faces: () -> List<TileFace>)
+
+/** The items a face shows. */
+private val TileFace.shownItems: List<TileItem>
+    get() = when (this) {
+        TileFace.Front -> emptyList()
+        is TileFace.Item -> listOf(item)
+        is TileFace.Stack -> items
+    }
+
 /** A tile being dragged: its top-left in grid pixels, and the finger's height in the viewport. */
 private class TileDrag(val id: Long, val size: TileSize, topLeft: Offset) {
     var topLeft by mutableStateOf(topLeft)
     var fingerY by mutableFloatStateOf(Float.NaN)
 }
 
-/** Turns the tiles' gestures into view model calls, and holds the drag in progress. */
+/** Turns the tiles' gestures into view model calls, holds the drag in progress, and turns the live tiles. */
 private class StartController(private val viewModel: StartViewModel) {
     var drag by mutableStateOf<TileDrag?>(null)
         private set
     var viewport: LayoutCoordinates? = null
+
+    // One ticker for the screen's life, and every tile on the grid.
+    val ticker = TileTicker(Random.Default)
+    val liveSlots = mutableMapOf<Long, LiveSlot>()
+
+    /** Whether a tile at [coords] overlaps the viewport. */
+    fun isShowing(coords: LayoutCoordinates?): Boolean {
+        val viewport = viewport ?: return false
+        if (coords == null || !coords.isAttached || !viewport.isAttached) return false
+        return viewport.localBoundingBoxOf(coords, clipBounds = false).overlaps(viewport.size.toSize().toRect())
+    }
+
+    /** One turn of the timer: a tile on screen with more than its front flips to its next face, and the turn ends with it. */
+    suspend fun tickLive() {
+        val candidates = liveSlots.filterValues { it.faces().size > 1 && isShowing(it.coords.value) }
+        val slot = ticker.tick(candidates.keys)?.let(candidates::getValue) ?: return
+        slot.face.flipTo(nextFace(slot.faces(), slot.face.face).key)
+    }
 
     /** Opens a tile's app from its bounds in the window, however the screen wants to. */
     var launch: (Long, Rect?) -> Unit = { id, bounds -> viewModel.open(id, bounds, null) }
