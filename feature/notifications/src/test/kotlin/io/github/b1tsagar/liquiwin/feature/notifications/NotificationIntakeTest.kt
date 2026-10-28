@@ -84,6 +84,13 @@ class NotificationIntakeTest {
         assertEquals(listOf("see you at 6"), items { it.isNotEmpty() }.map { it.item.text })
     }
 
+    // A message dated hours ahead would stay the newest for good, and reading it would mark every later one read.
+    @Test fun messagesDatedHoursAheadOfTheClockAreNotStored() = runTest {
+        val chat = whatsAppChat(listOf("are you coming?" to 1_000L, "see you at 6" to clock + 60_000L, "from a broken clock" to clock + 2 * 60 * 60 * 1000L))
+        intake().posted(sbn("com.whatsapp", chat))
+        assertEquals(listOf("see you at 6", "are you coming?"), items { it.isNotEmpty() }.map { it.item.text })
+    }
+
     // Review Focus 1
     @Test fun aNotificationThatFailsIsSkippedAndTheNextOneIsStored() = runTest {
         val intake = intake { if (it.packageName == "com.example.bad") error("unreadable") else normaliser.normalise(it) }

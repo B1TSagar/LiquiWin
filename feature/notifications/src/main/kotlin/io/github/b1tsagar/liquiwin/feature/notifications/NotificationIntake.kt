@@ -65,8 +65,10 @@ class NotificationIntake(
 
     private suspend fun store(sbn: StatusBarNotification) {
         val normalised = normalise(sbn) ?: return
-        val cutoff = now() - RETENTION_MS
-        val items = normalised.items.filter { it.postedAt >= cutoff }.distinctBy { it.key }
+        val time = now()
+        // An hour ahead allows for clocks that disagree; further ahead, an item would stay the newest for good, and
+        // reading it would mark every later message read.
+        val items = normalised.items.filter { it.postedAt in time - RETENTION_MS..time + CLOCK_SLACK_MS }.distinctBy { it.key }
         if (items.isEmpty()) return
         // Before the items, so a stored item never shows without its actions.
         actions.put(normalised.notificationKey, LiveActions(normalised.contentIntent, normalised.replyAction))
@@ -105,6 +107,7 @@ class NotificationIntake(
 
     companion object {
         const val RETENTION_MS = 24 * 60 * 60 * 1000L
+        const val CLOCK_SLACK_MS = 60 * 60 * 1000L
         const val PER_SOURCE = 50
     }
 }
