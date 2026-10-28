@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:icon="@android:drawable/sym_action_chat"
+        android:label="notifier">
+
+        <!-- noHistory: leaving it finishes it, so the launcher always opens the buttons, never an old chat. -->
+        <activity
+            android:name=".NotifierActivity"
+            android:exported="true"
+            android:noHistory="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Only the shell holds DUMP, so only adb can post. -->
+        <receiver
+            android:name=".PostReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="io.github.b1tsagar.liquiwin.tools.notifier.POST" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".ReplyReceiver"
+            android:exported="false" />
+    </application>
+</manifest>
