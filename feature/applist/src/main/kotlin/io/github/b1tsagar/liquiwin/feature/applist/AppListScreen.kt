@@ -1,8 +1,6 @@
 package io.github.b1tsagar.liquiwin.feature.applist
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.tween
+import android.app.ActivityOptions
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -40,25 +38,32 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.b1tsagar.liquiwin.core.data.apps.AppIcon
 import io.github.b1tsagar.liquiwin.core.data.apps.LauncherApp
 import io.github.b1tsagar.liquiwin.core.design.components.IconImage
 import io.github.b1tsagar.liquiwin.core.design.components.WpText
 import io.github.b1tsagar.liquiwin.core.design.icons.LiquiWinIcons
-import io.github.b1tsagar.liquiwin.core.design.motion.FEATHER_DURATION_MS
-import io.github.b1tsagar.liquiwin.core.design.motion.FEATHER_STAGGER_MS
-import io.github.b1tsagar.liquiwin.core.design.motion.featherIn
+import io.github.b1tsagar.liquiwin.core.design.motion.Turnstile
+import io.github.b1tsagar.liquiwin.core.design.motion.TurnstileClock
 import io.github.b1tsagar.liquiwin.core.design.motion.tilt
+import io.github.b1tsagar.liquiwin.core.design.motion.turnstile
 import io.github.b1tsagar.liquiwin.core.design.style.LocalStyleFacets
 import io.github.b1tsagar.liquiwin.core.design.theme.LocalLiquiWinColors
 import io.github.b1tsagar.liquiwin.core.design.theme.LocalLiquiWinType
 import io.github.b1tsagar.liquiwin.core.design.theme.LocalWpUnits
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** The app the context menu is open for, and its row's bounds in the screen's pixels. */
 private class MenuAnchor(val app: LauncherApp, val bounds: Rect)
@@ -93,25 +98,47 @@ fun AppListScreen(
     }
     val screen = remember { CoordinatesRef() }
 
-    // One clock feathers in every item on screen, counted from the first visible one; items off screen just appear.
-    val entrance = remember { Animatable(0f) }
-    var entranceDone by remember { mutableStateOf(shown) }
-    var entranceFirst by remember { mutableIntStateOf(0) }
+    // One clock turns every item on screen, counted from the first visible one; items off screen just appear. The list
+    // turnstiles in when it's shown, away before an app opens (the tapped row last), and back when LiquiWin returns.
+    val flip = remember { TurnstileClock(hiddenFor = if (shown) null else Turnstile.IN) }
+    var flipFirst by remember { mutableIntStateOf(0) }
+    var flipOnScreen by remember { mutableIntStateOf(0) }
+    var tappedItem by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(shown) {
         if (!shown) {
-            entranceDone = false
-            entrance.snapTo(0f)
-        } else if (!entranceDone) {
-            entranceFirst = listState.firstVisibleItemIndex
-            val lastOnScreen = (listState.layoutInfo.visibleItemsInfo.size - 1).coerceAtLeast(0)
-            val end = lastOnScreen * FEATHER_STAGGER_MS + FEATHER_DURATION_MS
-            entrance.animateTo(end.toFloat(), tween(end, easing = LinearEasing))
-            entranceDone = true
+            flip.hideFor(Turnstile.IN)
+        } else if (flip.motion == Turnstile.IN && !flip.isPlaying) {
+            flipFirst = listState.firstVisibleItemIndex
+            flip.play(Turnstile.IN, listState.layoutInfo.visibleItemsInfo.size - 1)
         }
     }
-    val elapsed = { if (entranceDone) Float.POSITIVE_INFINITY else entrance.value }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        if (shown && flip.motion == Turnstile.OUT && !flip.isPlaying) scope.launch {
+            flipFirst = listState.firstVisibleItemIndex
+            flip.play(Turnstile.BACK_IN, listState.layoutInfo.visibleItemsInfo.size - 1)
+        }
+    }
+    val context = LocalContext.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val launching = remember { mutableStateOf<Job?>(null) }
+    fun open(item: Int, app: LauncherApp, bounds: android.graphics.Rect?) {
+        if (launching.value?.isActive == true) return
+        launching.value = scope.launch {
+            flipFirst = listState.firstVisibleItemIndex
+            flipOnScreen = listState.layoutInfo.visibleItemsInfo.size
+            tappedItem = item
+            flip.play(Turnstile.OUT, flipOnScreen)
+            viewModel.open(app, bounds, ActivityOptions.makeCustomAnimation(context, android.R.anim.fade_in, 0).toBundle())
+            // A launch that fails leaves LiquiWin on screen, so nothing would bring the rows back: they come back here.
+            val left = withTimeoutOrNull(1_500) { lifecycle.currentStateFlow.first { !it.isAtLeast(Lifecycle.State.RESUMED) } }
+            if (left == null) flip.play(Turnstile.BACK_IN, flipOnScreen - 1)
+        }
+    }
     val slideStep = with(LocalDensity.current) { units.dp(50f).toPx() } // WP's slide-in: 50 px further out per line
-    fun Modifier.entering(item: Int): Modifier = (item - entranceFirst).coerceAtLeast(0).let { featherIn(elapsed, it, slideStep * it) }
+    fun Modifier.turning(item: Int): Modifier {
+        val index = listTurnstileIndex(flip.motion ?: Turnstile.IN, item, flipFirst, tappedItem, flipOnScreen)
+        return turnstile(flip, index, slideStep * index)
+    }
 
     // The list index of each section's header; item 0 is the search box.
     val headerItems = remember(state.index) {
@@ -136,27 +163,27 @@ fun AppListScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(units.dp(12f)),
         ) {
-            item(key = "search") { SearchBox(onSearch, Modifier.entering(0).alpha(dim)) }
+            item(key = "search") { SearchBox(onSearch, Modifier.turning(0).alpha(dim)) }
             // Counted here, from the sections being built: headerItems can be a composition behind the list.
             var next = 1
             for (section in state.index.sections) {
                 val header = next
                 next += 1 + section.apps.size
                 item(key = "header:${section.label}") {
-                    SectionHeader(section.label, Modifier.entering(header).alpha(dim)) { letterGridOpen = true }
+                    SectionHeader(section.label, Modifier.turning(header).alpha(dim)) { letterGridOpen = true }
                 }
                 itemsIndexed(section.apps, key = { _, app -> app.key.flatten() }) { i, app ->
                     AppRow(
                         app = app,
                         isNew = app.key in state.newApps,
                         icon = icon,
-                        modifier = Modifier.entering(header + 1 + i).alpha(if (menu == null || menu?.app?.key == app.key) 1f else 0.4f),
+                        modifier = Modifier.turning(header + 1 + i).alpha(if (menu == null || menu?.app?.key == app.key) 1f else 0.4f),
                         onOpen = { bounds ->
                             val window = bounds?.boundsInWindow()
                             val rect = window?.let {
                                 android.graphics.Rect(it.left.roundToInt(), it.top.roundToInt(), it.right.roundToInt(), it.bottom.roundToInt())
                             }
-                            viewModel.open(app, rect, null)
+                            open(header + 1 + i, app, rect)
                         },
                         onLongPress = { row -> screen.value?.let { menu = MenuAnchor(app, it.localBoundingBoxOf(row)) } },
                     )

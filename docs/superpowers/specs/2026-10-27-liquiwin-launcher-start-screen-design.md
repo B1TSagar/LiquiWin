@@ -296,7 +296,7 @@ LiquiWin uses the single-colour glyph from the adaptive icon's monochrome layer 
 | Motion | Used for |
 |---|---|
 | Tilt | Pressing any tile or list item tilts it toward the finger in 3D and depresses it slightly; it springs back on release |
-| Turnstile | Launching an app from Start: tiles swing away around the left edge column by column with a staggered "feather", the tapped tile last, then the app opens. Coming back home, they swing back in. With app launch animation set to "zoom from tile", Android's own launch animation grows the app out of the tile's bounds instead (`ActivityOptions.makeScaleUpAnimation`). |
+| Turnstile | Launching an app from Start: tiles swing away around the left edge column by column with a staggered "feather", the tapped tile last, then the app opens with a fade. Coming back home, they swing back in. The app list's rows do the same, top to bottom, when an app opens from the list; start's tiles also swing away when a swipe lets go toward the app list, and back when one lets go toward start. (Built after stage 1, ahead of stage 3, at the owner's request.) With app launch animation set to "zoom from tile", Android's own launch animation grows the app out of the tile's bounds instead (`ActivityOptions.makeScaleUpAnimation`). |
 | Glass morphs | Every layout change while the material is glass (§4.8) |
 | Continuum | Going from a list item into its page (for example a hub row title flying into the next page's header) |
 | Slide / turnstile | Moving between settings and other pages |

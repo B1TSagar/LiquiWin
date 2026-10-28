@@ -77,6 +77,18 @@ class AppListScreenTest {
     @Test fun aTapOnTheRightEndOfARowStillOpensTheApp() {
         show()
         compose.onNodeWithText("Camera").performTouchInput { click(Offset(width - 4.dp.toPx(), centerY)) }
+        compose.waitForIdle()
+        assertEquals(listOf(camera.key), catalog.launched)
+    }
+
+    // The rows on screen turnstile away first, the tapped one last, and only then does the app open.
+    @Test fun tappingAnAppFlipsTheRowsAwayThenOpensIt() {
+        show()
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithText("Camera").performClick()
+        compose.mainClock.advanceTimeBy(100)
+        assertEquals(emptyList<AppKey>(), catalog.launched)
+        compose.mainClock.advanceTimeBy(1_000)
         assertEquals(listOf(camera.key), catalog.launched)
     }
 }

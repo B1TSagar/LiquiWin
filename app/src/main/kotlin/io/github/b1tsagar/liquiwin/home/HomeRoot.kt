@@ -70,8 +70,12 @@ fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Mod
 
     val dragging = pager.interactionSource.collectIsDraggedAsState()
     var rowsShown by remember { mutableStateOf(false) }
+    var tilesShown by remember { mutableStateOf(true) }
     LaunchedEffect(pager) {
-        snapshotFlow { appListShown(rowsShown, dragging.value, pager.targetPage, pager.settledPage) }.collect { rowsShown = it }
+        snapshotFlow { Triple(dragging.value, pager.targetPage, pager.settledPage) }.collect { (held, target, settled) ->
+            rowsShown = appListShown(rowsShown, held, target, settled)
+            tilesShown = startShown(tilesShown, held, target)
+        }
     }
 
     // Holds focus during a Home press. Focus left in the pager, or restored there when search closes, would bring the
@@ -95,7 +99,7 @@ fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Mod
     Box(modifier.fillMaxSize().background(LocalLiquiWinColors.current.background).focusRequester(homeFocus).focusTarget()) {
         HorizontalPager(state = pager, modifier = Modifier.fillMaxSize(), beyondViewportPageCount = 1) { page ->
             if (page == 0) {
-                StartScreen(start, icon, startScroll, banner = {
+                StartScreen(start, icon, startScroll, shown = tilesShown, banner = {
                     if (!isDefaultHome) HomeAppBanner(onSet = deps.onSetHome, onSettings = deps.onOpenHomeSettings)
                 })
             } else {
@@ -118,3 +122,6 @@ internal fun appListShown(shown: Boolean, dragging: Boolean, targetPage: Int, se
     settledPage == 0 && targetPage == 0 -> false
     else -> shown
 }
+
+/** Whether start's tiles are in: they follow wherever a swipe lets go, and stay as they are while one is held. */
+internal fun startShown(shown: Boolean, dragging: Boolean, targetPage: Int): Boolean = if (dragging) shown else targetPage == 0

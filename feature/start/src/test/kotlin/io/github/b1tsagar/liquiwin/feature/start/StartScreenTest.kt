@@ -16,6 +16,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.b1tsagar.liquiwin.core.data.apps.AppKey
 import io.github.b1tsagar.liquiwin.core.data.apps.LauncherApp
 import io.github.b1tsagar.liquiwin.core.design.theme.LiquiWinTheme
 import io.github.b1tsagar.liquiwin.core.testing.FakeAppCatalog
@@ -49,9 +50,14 @@ class StartScreenTest {
 
     private fun longPressCamera() = compose.onNodeWithTag("tile-1").performTouchInput { longClick() }
 
-    @Test fun tappingATileOpensItsApp() {
+    // The tiles turnstile away first (0.4 s for three columns and then the tapped tile), and only then does the app open.
+    @Test fun tappingATileFlipsTheTilesAwayThenOpensItsApp() {
         show()
+        compose.mainClock.autoAdvance = false
         compose.onNodeWithTag("tile-1").performClick()
+        compose.mainClock.advanceTimeBy(100)
+        assertEquals(emptyList<AppKey>(), catalog.launched)
+        compose.mainClock.advanceTimeBy(1_000)
         assertEquals(listOf(camera.key), catalog.launched)
     }
 
