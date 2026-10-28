@@ -88,6 +88,7 @@ import io.github.b1tsagar.liquiwin.core.data.apps.LauncherApp
 import io.github.b1tsagar.liquiwin.core.design.components.WpText
 import io.github.b1tsagar.liquiwin.core.design.motion.Turnstile
 import io.github.b1tsagar.liquiwin.core.design.motion.TurnstileClock
+import io.github.b1tsagar.liquiwin.core.design.motion.tileFlipCameraDistance
 import io.github.b1tsagar.liquiwin.core.design.motion.tilt
 import io.github.b1tsagar.liquiwin.core.design.motion.turnstile
 import io.github.b1tsagar.liquiwin.core.design.style.LocalStyleFacets
@@ -396,7 +397,10 @@ private fun TileSlot(
                 scaleY = scale
                 alpha = dim * if (tile.isPaused) 0.4f else 1f
                 // The old face turns from 0° to 90°, then the new one from -90° to 0°.
-                if (!still && liveFace.from != null) rotationX = liveFace.angle.let { if (it < 90f) it else it - 180f }
+                if (!still && liveFace.from != null) {
+                    rotationX = liveFace.angle.let { if (it < 90f) it else it - 180f }
+                    cameraDistance = tileFlipCameraDistance(size.height)
+                }
             }
             .testTag("tile-${tile.id}")
             .semantics {
