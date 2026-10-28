@@ -235,4 +235,13 @@ class StartScreenTest {
         compose.onNodeWithText("Family").assertDoesNotExist()
         compose.onNodeWithContentDescription("hidden chats").assertDoesNotExist()
     }
+
+    // Final review: TalkBack hears the list open, as it would a dialog
+    @Test fun talkBackHearsTheHiddenChatsListOpen() {
+        cameraSource.hiddenState.value = listOf(HiddenChat(cameraSource.id, "family", "Family"))
+        show(pinned = listOf(camera))
+        compose.onNodeWithTag("tile-1").performTouchInput { longClick() }
+        compose.onNodeWithContentDescription("hidden chats").performClick()
+        compose.onNode(SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, "hidden chats")).assertExists()
+    }
 }

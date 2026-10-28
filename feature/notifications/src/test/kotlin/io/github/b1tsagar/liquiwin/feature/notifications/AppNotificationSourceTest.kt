@@ -200,6 +200,18 @@ class AppNotificationSourceTest {
         assertEquals(listOf("m", "a"), source.items.first().map { it.key })
         assertEquals(emptyList<HiddenChat>(), source.hiddenChats.first())
     }
+
+    // Final review: a plain notification's slot can hold an app's unrelated posts, so only chats and groups are hidden
+    @Test fun onlyAChatOrGroupCanBeHidden() = runTest {
+        dao.replaceNotification("n1", listOf(stored("a", 100)))
+        dao.replaceNotification("n2", listOf(stored("p", 100, conversation = "n2", notification = "n2", shortcut = null)))
+        dao.replaceNotification("n3", listOf(stored("m", 100, conversation = "n3", group = "Family", notification = "n3", shortcut = null)))
+        dao.replaceNotification("n4", listOf(stored("me", 100, conversation = "n4", notification = "n4", shortcut = null).copy(sender = "You", isSelf = true)))
+        assertTrue(source.chat("alex").first()!!.canHide) // keyed by its shortcut
+        assertFalse(source.chat("n2").first()!!.canHide) // a plain notification, keyed by itself
+        assertTrue(source.chat("n3").first()!!.canHide) // a group
+        assertTrue(source.chat("n4").first()!!.canHide) // holds a message of yours
+    }
 }
 
 private class RecordingLauncher : ItemLauncher {

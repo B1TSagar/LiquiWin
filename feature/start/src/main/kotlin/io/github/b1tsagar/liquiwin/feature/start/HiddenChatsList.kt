@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import io.github.b1tsagar.liquiwin.core.design.components.WpText
@@ -51,6 +52,7 @@ internal fun HiddenChatsList(chats: List<HiddenChat>, onShowAgain: (HiddenChat) 
                 .fillMaxWidth()
                 .background(LocalLiquiWinColors.current.chrome)
                 .pointerInput(Unit) { detectTapGestures {} } // taps on the panel reach neither the scrim nor edit mode
+                .semantics { paneTitle = "hidden chats" } // TalkBack says it opened, as it would a dialog
                 .navigationBarsPadding()
                 .padding(horizontal = side, vertical = units.dp(12f)),
         ) {

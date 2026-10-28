@@ -94,5 +94,5 @@ fun testMessage(
 )
 
 /** The chat "alex" of [messages], with no avatar. */
-fun testChat(vararg messages: ChatMessage, title: String = "Alex", isGroup: Boolean = false): Chat =
-    Chat("alex", title, avatar = null, isGroup, messages.toList())
+fun testChat(vararg messages: ChatMessage, title: String = "Alex", isGroup: Boolean = false, canHide: Boolean = true): Chat =
+    Chat("alex", title, avatar = null, isGroup, messages.toList(), canHide)

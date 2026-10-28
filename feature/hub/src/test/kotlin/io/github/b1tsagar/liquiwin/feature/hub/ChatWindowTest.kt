@@ -3,6 +3,8 @@ package io.github.b1tsagar.liquiwin.feature.hub
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
@@ -134,6 +136,13 @@ class ChatWindowTest {
         assertNull(vm.window.value)
     }
 
+    // Final review: a plain notification's slot can hold an app's unrelated posts, so it isn't hidden as a chat
+    @Test fun aPlainNotificationHasNoHideButton() {
+        open(testChat(a, canHide = false))
+        compose.onNodeWithText("hide this chat").assertDoesNotExist()
+        compose.onNodeWithText("open in app").assertIsDisplayed()
+    }
+
     @Test fun backAndATapOutsideClose() {
         open(testChat(a))
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
@@ -151,5 +160,11 @@ class ChatWindowTest {
         compose.onNodeWithContentDescription("close").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitForIdle()
         assertNull(vm.window.value)
+    }
+
+    // Final review: TalkBack hears the window open, as it would a dialog
+    @Test fun talkBackHearsTheWindowOpen() {
+        open(testChat(a))
+        compose.onNode(SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, "chat with Alex")).assertExists()
     }
 }

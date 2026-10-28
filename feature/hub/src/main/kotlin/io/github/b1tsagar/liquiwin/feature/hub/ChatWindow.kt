@@ -54,6 +54,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.Dp
@@ -129,6 +130,7 @@ fun ChatWindow(viewModel: ChatViewModel, catalog: AppCatalog, modifier: Modifier
                     }
                     .background(colors.chrome)
                     .pointerInput(Unit) {} // taps on the panel stay off the scrim beneath
+                    .semantics { paneTitle = "chat with ${shown.chat.title}" } // TalkBack says it opened, as it would a dialog
                     .navigationBarsPadding()
                     .heightIn(max = maxHeight * 0.8f),
             ) {
@@ -139,9 +141,11 @@ fun ChatWindow(viewModel: ChatViewModel, catalog: AppCatalog, modifier: Modifier
                 }
                 Row(Modifier.padding(horizontal = side), horizontalArrangement = Arrangement.spacedBy(units.dp(24f))) {
                     TextButton("open in app", onClick = viewModel::openInApp)
-                    TextButton("hide this chat") {
-                        viewModel.hide()
-                        leave()
+                    if (shown.chat.canHide) {
+                        TextButton("hide this chat") {
+                            viewModel.hide()
+                            leave()
+                        }
                     }
                 }
                 Bubbles(shown, side, Modifier.weight(1f, fill = false))

@@ -70,6 +70,9 @@ class AppNotificationSource(
                 avatar = if (group == null) incoming?.avatarFile?.let { ImageRef(File(imagesDir, it)) } else null,
                 isGroup = group != null,
                 messages = stored.map { (item, unread) -> ChatMessage(item.toItem(unread, live), item.sender, item.isSelf) },
+                // A plain notification is keyed by itself, and an app may fill its slot with unrelated posts, so only messages
+                // can be hidden. A one-to-one chat with no shortcut looks the same until it holds a message of yours.
+                canHide = group != null || stored.any { (item) -> item.conversationKey != item.notificationKey || item.isSelf },
             )
         }
 
