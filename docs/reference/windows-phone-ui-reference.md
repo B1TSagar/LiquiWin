@@ -93,3 +93,16 @@ How the spec uses these findings, including where it departs from the originals 
 - **Folder faces.** The spec's 3×3 preview grid is LiquiWin's own design, because what the original folder face showed couldn't be verified.
 - **Names.** WP7, WP8.1, W10M and Modern Metro are working preset names. They get neutral names before a store release (spec §2).
 - **Samsung.** The longer hold for recent apps under a third-party launcher is a One UI limit that LiquiWin can't change (spec §1.5).
+
+## Values chosen in stage 1
+
+Checked on the Galaxy S24 (1080 × 2340 px, 411 dp wide). WP px are 1/480 of the screen width.
+
+- **Grid:** six units (three medium columns), with a side margin of 24 WP px and a gap of 12 WP px.
+- **Tiles:** solid accent (`#1BA1E2`), with the app icon centred at half the tile's shorter side. The label is Selawik Regular at 18.667 WP px, inset 12 WP px from the left and 8 WP px from the bottom.
+- **App list rows:** a 56 WP px accent square with the icon at 28 WP px, then the label in Selawik Regular at 25.333 WP px, 12 WP px to the right. Rows are 12 WP px apart.
+- **App list headers:** a 56 WP px square outlined in the accent colour (2 dp), with the lowercase letter at 32 WP px in its bottom-left corner. The letter grid has four columns of accent squares; letters with no apps are dark grey.
+- **Chrome:** `#1F1F1F`, for the search box, the edit bar and the Home banner.
+- **Edit mode:** unpin at the tile's top-right corner and resize at its bottom-right, each a 32 dp white circle with an 18 dp black glyph in a 48 dp touch target. The edit bar is 72 WP px of chrome above the navigation bar, holding **done** as a 48 WP px white ring.
+- **Tilt:** up to 0.3 rad toward the finger, with a depression scale of 0.025, so a press at the centre shrinks the tile by 2.5%. It springs back 200 ms after release, over 100 ms.
+- **Changed during the Galaxy check:** a tile that shrinks re-flows the tiles after it, so they fill the space it frees, even across columns (spec §4.2). Search keeps the spec's ranking: "wa" lists WhatsApp, below apps whose names start with "wa".
