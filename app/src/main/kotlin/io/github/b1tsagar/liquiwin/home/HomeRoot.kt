@@ -1,5 +1,6 @@
 package io.github.b1tsagar.liquiwin.home
 
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -23,6 +24,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
@@ -77,15 +79,19 @@ fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Mod
     var resetKey by remember { mutableIntStateOf(0) }
     var isDefaultHome by remember { mutableStateOf(deps.isDefaultHome()) }
 
-    // Whether LiquiWin is fully on screen: not once another app covers it, and again when Android's animation bringing it
-    // back has finished, or 0.7 s after it resumes on a phone that never says. Flips that bring a screen back wait for it.
-    var onScreen by remember { mutableStateOf(true) }
-    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { onScreen = false }
+    // Whether LiquiWin is fully on screen: not while another app covers it, until Android's animation bringing it back has
+    // finished (or 0.7 s after it resumes, on a phone that never says), and not while One UI's close-to-home animation
+    // plays after a Home press from an app, which outlasts that signal. Flips that bring a screen back wait for it.
+    var covered by remember { mutableStateOf(false) }
+    var closingToHome by remember { mutableStateOf(false) }
+    val onScreen = !covered && !closingToHome
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { covered = true }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         isDefaultHome = deps.isDefaultHome()
-        if (!onScreen) scope.launch { delay(700); onScreen = true }
+        if (covered) scope.launch { delay(700); covered = false }
     }
-    LaunchedEffect(windowEntered) { windowEntered.collect { onScreen = true } }
+    LaunchedEffect(windowEntered) { windowEntered.collect { covered = false } }
+    val context = LocalContext.current
 
     // Each change of screen waits for the leaving screen to report it has gone.
     var tilesShown by remember { mutableStateOf(true) }
@@ -115,7 +121,13 @@ fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Mod
                 toStart()
                 startScroll.scrollTo(0)
             } else {
-                // From another app, straight to start; its tiles come back once LiquiWin is fully on screen.
+                // From another app, straight to start; its tiles come back once LiquiWin is fully on screen. One UI's
+                // close-to-home animation takes about 0.4 s, scaled like Android's own transitions.
+                if (press == HomePress.FROM_APP) {
+                    closingToHome = true
+                    val scale = Settings.Global.getFloat(context.contentResolver, Settings.Global.TRANSITION_ANIMATION_SCALE, 1f)
+                    scope.launch { delay((400 * scale).toLong()); closingToHome = false }
+                }
                 moving = false
                 pager.scrollToPage(0)
                 rowsShown = false
