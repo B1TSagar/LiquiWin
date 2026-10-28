@@ -54,11 +54,15 @@ object GridLayout {
         return reflowAround(tile.copy(cell = cell), compact(tiles.filter { it.id != id }, width), width)
     }
 
-    /** Keeps the tile's cell, shifted left if it would stick out, and re-flows the others from the first collision. */
+    /**
+     * Keeps the tile's cell, shifted left if it would stick out, and re-flows the others from the first collision. A tile
+     * that shrinks re-flows every tile after it instead, so they fill the space it frees, even across columns.
+     */
     fun resize(tiles: List<Placed>, id: Long, newSize: TileSize, width: Int): List<Placed> {
         val tile = tiles.firstOrNull { it.id == id } ?: return tiles
         val cell = Cell(tile.cell.x.coerceAtMost(width - newSize.widthUnits), tile.cell.y)
-        return reflowAround(Placed(id, newSize, cell), tiles, width)
+        val shrinks = newSize.widthUnits * newSize.heightUnits < tile.size.widthUnits * tile.size.heightUnits
+        return reflowAround(Placed(id, newSize, cell), tiles, width, reflowLater = shrinks)
     }
 
     /**
@@ -83,14 +87,15 @@ object GridLayout {
     }
 
     // The fixed tile stays; tiles before the first one it overlaps stay; that tile and all after it take the first fit
-    // from its row, around the tiles already placed, so none jumps into a hole above the collision.
-    private fun reflowAround(fixed: Placed, tiles: List<Placed>, width: Int): List<Placed> {
+    // from its row, around the tiles already placed, so none jumps into a hole above the collision. With reflowLater,
+    // every tile after the fixed one re-flows too, from the fixed tile's row.
+    private fun reflowAround(fixed: Placed, tiles: List<Placed>, width: Int, reflowLater: Boolean = false): List<Placed> {
         val others = tiles.filter { it.id != fixed.id }.sortedWith(readingOrder)
-        val firstHit = others.indexOfFirst { it.overlaps(fixed) }
-        if (firstHit < 0) return compact(others + fixed, width)
-        val fromRow = others[firstHit].cell.y
-        val placed = (others.take(firstHit) + fixed).toMutableList()
-        for (t in others.drop(firstHit)) placed += firstFit(placed, t.id, t.size, width, fromRow)
+        val first = others.indexOfFirst { it.overlaps(fixed) || reflowLater && readingOrder.compare(it, fixed) > 0 }
+        if (first < 0) return compact(others + fixed, width)
+        val fromRow = if (reflowLater) minOf(fixed.cell.y, others[first].cell.y) else others[first].cell.y
+        val placed = (others.take(first) + fixed).toMutableList()
+        for (t in others.drop(first)) placed += firstFit(placed, t.id, t.size, width, fromRow)
         return compact(placed, width)
     }
 

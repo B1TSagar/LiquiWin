@@ -2,6 +2,7 @@ package io.github.b1tsagar.liquiwin.feature.start.layout
 
 import io.github.b1tsagar.liquiwin.core.tiles.model.TilePlacement
 import io.github.b1tsagar.liquiwin.core.tiles.model.TileSize
+import io.github.b1tsagar.liquiwin.core.tiles.model.TileSize.LARGE
 import io.github.b1tsagar.liquiwin.core.tiles.model.TileSize.MEDIUM
 import io.github.b1tsagar.liquiwin.core.tiles.model.TileSize.SMALL
 import io.github.b1tsagar.liquiwin.core.tiles.model.TileSize.WIDE
@@ -72,6 +73,13 @@ class GridLayoutTest {
 
     @Test fun resizeAtTheRightEdgeShiftsTheTileLeft() {
         assertEquals(Cell(2, 0), cells(GridLayout.resize(listOf(p(1, SMALL, 3, 0)), id = 1, newSize = MEDIUM, width = 4))[1])
+    }
+
+    // The owner's case from the Galaxy check: floating up alone left tiles 3 and 6 stacked down the right edge.
+    @Test fun shrinkingATileReflowsTheTilesAfterItIntoTheSpaceItFrees() {
+        val start = listOf(p(1, LARGE, 0, 0), p(2, MEDIUM, 4, 0), p(3, MEDIUM, 4, 2), p(4, MEDIUM, 0, 4), p(5, MEDIUM, 2, 4), p(6, MEDIUM, 4, 4))
+        val out = GridLayout.resize(start, id = 1, newSize = SMALL, width = 6)
+        assertEquals(mapOf(1L to Cell(0, 0), 2L to Cell(1, 0), 3L to Cell(3, 0), 4L to Cell(0, 2), 5L to Cell(2, 2), 6L to Cell(4, 2)), cells(out))
     }
 
     @Test fun reconcileFlowsAWidthWithNoSavedArrangement() {

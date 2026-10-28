@@ -252,8 +252,8 @@ The status bar's "hidden until tapped" option hides Android's status bar on the 
 - **Grid width.** The grid is the column count × 2 units wide, so 4, 6 or 8 units. Every tile size fits every width.
 - **Unit size.** The edge of one unit = (screen width − 2 × side margin − (units − 1) × gap) / units. Margin and gap come from the active preset's reference values.
 - **Arrangements.** Each grid width keeps its own arrangement in `tile_placement`. The first time a width is shown, tiles flow in the order of the most recently used width: row by row, top-left first, each placed in the first space it fits. Once the user edits at that width, the positions are saved.
-- **Compaction.** After every edit, tiles float upward until blocked, keeping their columns. This closes vertical holes. Holes at the end of a row next to wider tiles may stay, as on Windows Phone.
-- **Size.** Size belongs to the tile, not to one width. Changing a tile's size at one width leaves the other widths' positions where they still fit. Tiles that now collide are re-flowed from the first collision onward.
+- **Compaction.** After every edit, tiles float upward until blocked, keeping their columns. This closes vertical holes. Holes at the end of a row next to wider tiles may stay, as on Windows Phone. The exception is a tile that shrinks: at every width, the tiles after it re-flow from its row, so they fill the space it frees, even across columns. (The owner's call at stage 1's Galaxy check: floating up alone left tiles stacked down one edge.)
+- **Size.** Size belongs to the tile, not to one width. Growing a tile at one width leaves the other widths' positions where they still fit. Tiles that now collide are re-flowed from the first collision onward. Shrinking re-flows as under Compaction.
 - **Scrolling.** The start screen is one vertical scroll. The app list is a page to the right, reached by swipe, by the WP7 arrow, or both.
 
 ### 4.3 Edit mode
