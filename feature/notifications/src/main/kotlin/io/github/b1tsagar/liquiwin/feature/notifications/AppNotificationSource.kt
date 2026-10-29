@@ -10,6 +10,7 @@ import io.github.b1tsagar.liquiwin.core.tiles.source.ChatMessage
 import io.github.b1tsagar.liquiwin.core.tiles.source.ConversationRef
 import io.github.b1tsagar.liquiwin.core.tiles.source.HiddenChat
 import io.github.b1tsagar.liquiwin.core.tiles.source.ImageRef
+import io.github.b1tsagar.liquiwin.core.tiles.source.ItemButton
 import io.github.b1tsagar.liquiwin.core.tiles.source.ReplyResult
 import io.github.b1tsagar.liquiwin.core.tiles.source.TileItem
 import io.github.b1tsagar.liquiwin.core.tiles.source.TileSource
@@ -31,8 +32,9 @@ class AppNotificationSource(
 ) : TileSource {
     override val id = SourceId.forApp(packageName, userSerial)
 
+    // Your own messages are never unread, so leaving them out keeps a tile's history to what others sent (§5.3).
     override val items: Flow<List<TileItem>> = combine(dao.observeItems(id.value), actions.actions) { stored, live ->
-        stored.map { (item, unread) -> item.toItem(unread, live) }
+        stored.filterNot { it.item.isSelf }.map { (item, unread) -> item.toItem(unread, live) }
     }
 
     override val unreadCount: Flow<Int> = items.map { items -> items.count { it.unread } }
@@ -90,6 +92,22 @@ class AppNotificationSource(
         dao.showAgain(id.value, conversationKey)
     }
 
+    // Reads first, so the messages leave the tile even when the app won't let its notification go (§9).
+    override suspend fun clear(item: TileItem) {
+        val notificationKey = dao.item(item.key)?.takeIf { it.removedAt == null }?.notificationKey ?: return
+        dao.markNotificationRead(notificationKey)
+        launcher.cancel(notificationKey)
+    }
+
+    override suspend fun press(item: TileItem, button: Int) {
+        markRead(listOf(item))
+        val live = dao.item(item.key)?.takeIf { it.removedAt == null }?.let { actions.actions.value[it.notificationKey] }
+        // A reply action would go without text, so it opens the item instead, as a button that's gone or fails does.
+        val pending = live?.buttons?.getOrNull(button)?.takeIf { it !== live.reply }?.actionIntent
+        if (pending != null && launcher.send(pending)) return
+        open(item)
+    }
+
     private fun app() = catalog.apps.value.firstOrNull { it.key.packageName == packageName && it.key.userSerial == userSerial }
 
     private fun NotificationItemEntity.toItem(unread: Boolean, live: Map<String, LiveActions>) = TileItem(
@@ -103,5 +121,8 @@ class AppNotificationSource(
         unread = unread,
         canReply = removedAt == null && live[notificationKey]?.reply != null,
         conversation = ConversationRef(conversationKey, shortcutId),
+        buttons = live[notificationKey]?.takeIf { removedAt == null }
+            ?.let { posted -> posted.buttons.map { ItemButton(it.title.toString(), it === posted.reply) } }.orEmpty(),
+        photoUnreadable = photoUnreadable,
     )
 }

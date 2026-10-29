@@ -14,6 +14,7 @@ import io.github.b1tsagar.liquiwin.core.testing.FakeAppCatalog
 import io.github.b1tsagar.liquiwin.core.testing.testApp
 import io.github.b1tsagar.liquiwin.core.tiles.source.HiddenChat
 import io.github.b1tsagar.liquiwin.core.tiles.source.ImageRef
+import io.github.b1tsagar.liquiwin.core.tiles.source.ItemButton
 import io.github.b1tsagar.liquiwin.core.tiles.source.ReplyResult
 import io.github.b1tsagar.liquiwin.core.tiles.source.TileItem
 import java.io.File
@@ -47,8 +48,17 @@ class AppNotificationSourceTest {
 
     @After fun tearDown() = db.close()
 
-    private fun stored(key: String, at: Long, conversation: String = "alex", group: String? = null, notification: String = "n1", serial: Long = 0, shortcut: String? = "alex") =
-        NotificationItemEntity(key, notification, "app:com.whatsapp@$serial", conversation, group, shortcut, if (group == null) "Alex" else "Mum", "hi", "$key.webp", null, at, null, false)
+    private fun stored(
+        key: String, at: Long, conversation: String = "alex", group: String? = null, notification: String = "n1", serial: Long = 0,
+        shortcut: String? = "alex", self: Boolean = false, photoUnreadable: Boolean = false,
+    ) = NotificationItemEntity(
+        key, notification, "app:com.whatsapp@$serial", conversation, group, shortcut, if (group == null) "Alex" else "Mum", "hi", "$key.webp",
+        null, at, null, self, photoUnreadable,
+    )
+
+    // A button with its own intent, as a missed call's are.
+    private fun button(title: String) =
+        Notification.Action.Builder(null, title, PendingIntent.getBroadcast(context, title.hashCode(), Intent(title), PendingIntent.FLAG_IMMUTABLE)).build()
 
     @Test fun itemsAreNewestFirstWithUnreadAndCanReply() = runTest {
         dao.replaceNotification("n1", listOf(stored("a", 100), stored("b", 200)))
@@ -212,6 +222,78 @@ class AppNotificationSourceTest {
         assertTrue(source.chat("n3").first()!!.canHide) // a group
         assertTrue(source.chat("n4").first()!!.canHide) // holds a message of yours
     }
+
+    // Review Focus 2
+    @Test fun clearingReadsItsNotificationsMessagesAndAsksAndroidToRemoveIt() = runTest {
+        dao.replaceNotification("n1", listOf(stored("a", 100)))
+        dao.replaceNotification("n2", listOf(stored("b", 200, notification = "n2")))
+        source.clear(source.items.first().single { it.key == "a" })
+        assertEquals(listOf("n1"), launcher.cancelled)
+        assertEquals(listOf("b"), source.items.first().filter { it.unread }.map { it.key })
+        dao.markRemoved("n1", now = 300) // Android's removal, when it comes
+        assertEquals(listOf("a", "b"), source.chat("alex").first()!!.messages.map { it.item.key }) // the window still has it
+    }
+
+    @Test fun itemsLeaveOutYourOwnMessagesButTheChatKeepsThem() = runTest {
+        dao.replaceNotification("n1", listOf(stored("a", 100), stored("me", 150, self = true)))
+        assertEquals(listOf("a"), source.items.first().map { it.key })
+        assertEquals(listOf("a", "me"), source.chat("alex").first()!!.messages.map { it.item.key })
+    }
+
+    // Review Focus 3
+    @Test fun aMissedCallsButtonsShowWhileItsNotificationIsPosted() = runTest {
+        dao.replaceNotification("n1", listOf(stored("c", 100)))
+        actions.put("n1", LiveActions(intent, reply, listOf(button("Call back"), reply)))
+        assertEquals(listOf(ItemButton("Call back", isReply = false), ItemButton("Reply", isReply = true)), source.items.first().single().buttons)
+        dao.markRemoved("n1", now = 200)
+        assertEquals(emptyList<ItemButton>(), source.items.first().single().buttons)
+    }
+
+    @Test fun pressingAButtonSendsItsIntentAndReadsTheItem() = runTest {
+        dao.replaceNotification("n1", listOf(stored("c", 100)))
+        val callBack = button("Call back")
+        actions.put("n1", LiveActions(intent, null, listOf(callBack)))
+        source.press(source.items.first().single(), 0)
+        assertEquals(listOf(callBack.actionIntent), launcher.sent)
+        assertFalse(source.items.first().single().unread)
+    }
+
+    // Review Focus 3
+    @Test fun aButtonThatFailsOpensTheItemInstead() = runTest {
+        dao.replaceNotification("n1", listOf(stored("c", 100)))
+        actions.put("n1", LiveActions(intent, null, listOf(button("Call back"))))
+        launcher.sendWorks = false
+        source.press(source.items.first().single(), 0)
+        assertEquals(listOf(Triple("com.whatsapp", "alex", 0L)), launcher.shortcuts)
+    }
+
+    // Review Focus 3
+    @Test fun aButtonWhoseNotificationHasGoneOpensTheItem() = runTest {
+        dao.replaceNotification("n1", listOf(stored("c", 100)))
+        val callBack = button("Call back")
+        actions.put("n1", LiveActions(intent, null, listOf(callBack)))
+        val item = source.items.first().single()
+        dao.markRemoved("n1", now = 200)
+        actions.remove("n1")
+        source.press(item, 0)
+        assertEquals(listOf(Triple("com.whatsapp", "alex", 0L)), launcher.shortcuts)
+        assertFalse(callBack.actionIntent in launcher.sent)
+    }
+
+    // Review Focus 3
+    @Test fun aReplyButtonIsNeverSentWithoutText() = runTest {
+        dao.replaceNotification("n1", listOf(stored("c", 100)))
+        val replyButton = button("Reply") // its own intent, unlike the file's `reply`, which shares the content intent
+        actions.put("n1", LiveActions(intent, replyButton, listOf(button("Call back"), replyButton)))
+        source.press(source.items.first().single(), 1)
+        assertEquals(listOf(intent), launcher.sent) // opened through its content intent instead
+        assertEquals(emptyList<Pair<Notification.Action, String>>(), launcher.replies)
+    }
+
+    @Test fun anItemSaysWhenItsPhotoCouldntBeRead() = runTest {
+        dao.replaceNotification("n1", listOf(stored("p", 100, photoUnreadable = true)))
+        assertTrue(source.items.first().single().photoUnreadable)
+    }
 }
 
 private class RecordingLauncher : ItemLauncher {
@@ -220,7 +302,9 @@ private class RecordingLauncher : ItemLauncher {
     val sent = mutableListOf<PendingIntent>()
     val shortcuts = mutableListOf<Triple<String, String, Long>>()
     val replies = mutableListOf<Pair<Notification.Action, String>>()
+    val cancelled = mutableListOf<String>()
     var goneCount = 0
+    override fun cancel(notificationKey: String) { cancelled += notificationKey }
     override fun send(intent: PendingIntent) = sendWorks.also { if (it) sent += intent }
     override fun startShortcut(packageName: String, shortcutId: String, userSerial: Long) = true.also { shortcuts += Triple(packageName, shortcutId, userSerial) }
     override fun appGone() { goneCount++ }

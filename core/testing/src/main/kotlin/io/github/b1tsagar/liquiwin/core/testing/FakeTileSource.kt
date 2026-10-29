@@ -5,6 +5,7 @@ import io.github.b1tsagar.liquiwin.core.tiles.source.Chat
 import io.github.b1tsagar.liquiwin.core.tiles.source.ChatMessage
 import io.github.b1tsagar.liquiwin.core.tiles.source.ConversationRef
 import io.github.b1tsagar.liquiwin.core.tiles.source.HiddenChat
+import io.github.b1tsagar.liquiwin.core.tiles.source.ItemButton
 import io.github.b1tsagar.liquiwin.core.tiles.source.ReplyResult
 import io.github.b1tsagar.liquiwin.core.tiles.source.TileItem
 import io.github.b1tsagar.liquiwin.core.tiles.source.TileSource
@@ -22,6 +23,8 @@ class FakeTileSource(override val id: SourceId) : TileSource {
     val chatState = MutableStateFlow<Chat?>(null) // chat(key) gives it while its key matches
     val hiddenState = MutableStateFlow<List<HiddenChat>>(emptyList())
     val replies = mutableListOf<Pair<TileItem, String>>()
+    val cleared = mutableListOf<TileItem>()
+    val pressed = mutableListOf<Pair<TileItem, Int>>()
     var replyResult: ReplyResult = ReplyResult.Sent
     var replyGate: CompletableDeferred<Unit>? = null // when set, reply() records, then waits for it
 
@@ -54,6 +57,14 @@ class FakeTileSource(override val id: SourceId) : TileSource {
     override suspend fun showAgain(conversationKey: String) {
         hiddenState.value = hiddenState.value.filterNot { it.conversationKey == conversationKey }
     }
+
+    override suspend fun clear(item: TileItem) {
+        cleared += item
+    }
+
+    override suspend fun press(item: TileItem, button: Int) {
+        pressed += item to button
+    }
 }
 
 /** A message from [title], with no images, and the conversation named after [title]. */
@@ -77,6 +88,14 @@ fun testItem(
     canReply = canReply,
     conversation = ConversationRef(title.lowercase(), null),
 )
+
+/** A missed call from Alex, with [buttons] as its notification's. */
+fun testCall(
+    key: String = "call",
+    at: Long = 0,
+    buttons: List<ItemButton> = listOf(ItemButton("Call back", false), ItemButton("Message", false)),
+    source: SourceId = SourceId("app:com.example.chat@0"),
+): TileItem = testItem(key, title = "Alex", text = "missed call", at = at, source = source).copy(buttons = buttons)
 
 /** A message in the chat "alex", unread unless it's yours. */
 fun testMessage(

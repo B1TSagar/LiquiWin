@@ -3,17 +3,30 @@ package io.github.b1tsagar.liquiwin.feature.notifications
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import java.lang.ref.WeakReference
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/** Whether Android has the listener bound right now. */
+/** Whether Android has the listener bound right now, and the listener while it is. */
 object ListenerConnection {
     private val state = MutableStateFlow(false)
     val connected: StateFlow<Boolean> = state.asStateFlow()
 
-    internal fun set(connected: Boolean) {
+    // Weak, so a listener Android has let go isn't kept alive here.
+    @Volatile private var listener: WeakReference<NotificationListenerService>? = null
+
+    internal fun set(connected: Boolean, listener: NotificationListenerService? = null) {
+        this.listener = listener?.let(::WeakReference)
         state.value = connected
+    }
+
+    /** Removes the notification from Android's panel, as a swipe there would. Does nothing while no listener is bound. */
+    fun cancel(notificationKey: String) {
+        val bound = listener?.get() ?: return
+        // Only the exception's type: its message could name the notification.
+        runCatching { bound.cancelNotification(notificationKey) }
+            .onFailure { Log.w("NotificationListener", "Can't clear a notification: ${it.javaClass.simpleName}") }
     }
 }
 
@@ -22,7 +35,7 @@ open class LiquiWinNotificationListener : NotificationListenerService() { // ope
     private val intake get() = (application as? NotificationsHost)?.notificationIntake
 
     override fun onListenerConnected() {
-        ListenerConnection.set(true) // in safe mode too: leaving it keeps this process, and the health check reads this
+        ListenerConnection.set(true, this) // in safe mode too: leaving it keeps this process, and the health check reads this
         val intake = intake ?: return
         try {
             intake.synced(activeNotifications.toList())

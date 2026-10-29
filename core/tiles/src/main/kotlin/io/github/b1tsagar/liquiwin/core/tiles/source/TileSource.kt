@@ -12,6 +12,9 @@ value class ImageRef(val file: File)
 /** The conversation an item belongs to, with the app's shortcut to it when there is one. */
 data class ConversationRef(val key: String, val shortcutId: String?)
 
+/** A missed call's button (§5.1). [isReply] buttons open the chat window instead of being pressed. */
+data class ItemButton(val label: String, val isReply: Boolean)
+
 /** One thing a live tile can show, such as a message (§3.2). */
 data class TileItem(
     val key: String,
@@ -24,6 +27,8 @@ data class TileItem(
     val unread: Boolean,
     val canReply: Boolean,
     val conversation: ConversationRef?,
+    val buttons: List<ItemButton> = emptyList(), // while its notification is still posted
+    val photoUnreadable: Boolean = false, // §5.7's card
 )
 
 sealed interface ReplyResult {
@@ -34,7 +39,7 @@ sealed interface ReplyResult {
 /** Anything that feeds a tile, such as all of one app's notifications (§3.2). */
 interface TileSource {
     val id: SourceId
-    val items: Flow<List<TileItem>> // newest first, without hidden chats
+    val items: Flow<List<TileItem>> // newest first, without hidden chats or your own messages
     val unreadCount: Flow<Int> // without hidden chats
     val hiddenChats: Flow<List<HiddenChat>> // newest hidden first
     suspend fun open(item: TileItem?) // null opens the app
@@ -43,4 +48,6 @@ interface TileSource {
     suspend fun reply(item: TileItem, text: String): ReplyResult // §5.7
     suspend fun hide(chat: Chat) // §5.8
     suspend fun showAgain(conversationKey: String)
+    suspend fun clear(item: TileItem) // §5.5: reads its notification's messages, then removes it from Android's panel
+    suspend fun press(item: TileItem, button: Int) // §5.5: opens the item instead if the button has gone, fails or takes a reply
 }

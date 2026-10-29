@@ -29,6 +29,14 @@ class TileStateTest {
         assertEquals(3, state.unread)
     }
 
+    @Test fun historyIsEverySourcesReadItemsNewestFirst() = runTest {
+        a.itemState.value = listOf(testItem("a2", at = 30, unread = false, source = a.id), testItem("a1", at = 10, source = a.id))
+        b.itemState.value = listOf(testItem("b1", at = 20, unread = false, source = b.id))
+        val state = tileState(listOf(a, b)).first()
+        assertEquals(listOf("a2", "b1"), state.history.map { it.key })
+        assertEquals(listOf("a1"), state.rotation.map { it.key })
+    }
+
     @Test fun aTileWithNoSourcesHasAnEmptyState() = runTest {
         assertEquals(TileState(emptyList(), 0), tileState(emptyList()).first())
     }

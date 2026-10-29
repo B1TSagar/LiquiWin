@@ -20,6 +20,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 @RunWith(AndroidJUnit4::class)
@@ -71,6 +72,19 @@ class LiquiWinNotificationListenerTest {
         assertTrue(ListenerConnection.connected.value)
         listener.onListenerDisconnected()
         assertFalse(ListenerConnection.connected.value)
+    }
+
+    // Review Focus 2. A plain listener, since ShowingListener replaces the active notifications Robolectric's shadow keeps.
+    @Test fun aBoundListenerRemovesANotificationAndAnUnboundOneDoesNothing() {
+        val bound = Robolectric.buildService(LiquiWinNotificationListener::class.java).create().get()
+        bound.onListenerConnected()
+        shadowOf(bound).addActiveNotification("com.whatsapp", 1, whatsAppChat())
+        ListenerConnection.cancel(bound.activeNotifications.single().key)
+        assertEquals(0, bound.activeNotifications.size)
+        bound.onListenerDisconnected()
+        shadowOf(bound).addActiveNotification("com.whatsapp", 2, whatsAppChat())
+        ListenerConnection.cancel(bound.activeNotifications.single().key)
+        assertEquals(1, bound.activeNotifications.size)
     }
 }
 

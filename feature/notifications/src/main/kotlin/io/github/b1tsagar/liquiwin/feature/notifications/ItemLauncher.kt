@@ -23,6 +23,9 @@ interface ItemLauncher {
 
     /** Fills [action]'s free-form inputs with [text] and sends it. False if it takes no text or was cancelled. */
     fun reply(action: Notification.Action, text: String): Boolean
+
+    /** Removes the notification from Android's panel, as a swipe there would (§5.5). Nothing while the listener is unbound. */
+    fun cancel(notificationKey: String)
 }
 
 class AndroidItemLauncher(private val context: Context) : ItemLauncher {
@@ -79,4 +82,6 @@ class AndroidItemLauncher(private val context: Context) : ItemLauncher {
             false
         }
     }
+
+    override fun cancel(notificationKey: String) = ListenerConnection.cancel(notificationKey)
 }
