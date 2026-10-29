@@ -52,4 +52,19 @@ class ChatsTest {
         val receiver = context.packageManager.getReceiverInfo(ComponentName(context, PostReceiver::class.java), 0)
         assertEquals("android.permission.DUMP", receiver.permission)
     }
+
+    @Test fun aMissedCallHasTwoButtonsThatOnlyLog() {
+        Chats.postCall(context)
+        val call = showing(5)
+        assertEquals(NotificationCompat.CATEGORY_MISSED_CALL, call.category)
+        assertEquals(listOf("Call back", "Message"), call.actions.map { it.title.toString() })
+        assertTrue(call.actions.all { it.remoteInputs.isNullOrEmpty() })
+    }
+
+    @Test fun aChatPhotoIsServedByTheNotifiersOwnProvider() {
+        Chats.postPicture(context)
+        val photo = style(1).messages.last()
+        assertEquals("image/png", photo.dataMimeType)
+        assertEquals("${context.packageName}.photos", photo.dataUri?.authority)
+    }
 }

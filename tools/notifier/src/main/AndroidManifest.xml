@@ -31,5 +31,20 @@
         <receiver
             android:name=".ReplyReceiver"
             android:exported="false" />
+
+        <receiver
+            android:name=".ButtonReceiver"
+            android:exported="false" />
+
+        <!-- The chat photo's, served as chat apps serve theirs: to no app, unless Android passes on a grant. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.photos"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/photos" />
+        </provider>
     </application>
 </manifest>

@@ -5,8 +5,10 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Paint
+import android.net.Uri
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
 import androidx.core.app.RemoteInput
@@ -15,13 +17,15 @@ import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.applyCanvas
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.drawable.IconCompat
+import java.io.File
 
 /** Posts WhatsApp-like and Instagram-like notifications (spec §10). Keeps no state: each post starts from the one showing. */
 object Chats {
     internal const val CHAT = "chat"
     internal const val REPLY = "reply"
+    internal const val BUTTON = "button"
     private const val CHANNEL = "chats"
-    private val ids = mapOf("alex" to 1, "family" to 2, "photo" to 3, "snap" to 4)
+    private val ids = mapOf("alex" to 1, "family" to 2, "photo" to 3, "snap" to 4, "call" to 5)
     private val you = Person.Builder().setName("You").build()
 
     // The first person sends what you receive; a chat with more than one is a group.
@@ -44,16 +48,10 @@ object Chats {
     }
 
     /** Instagram-like: a big picture. */
-    fun postPhoto(context: Context) {
-        val picture = createBitmap(1080, 720).applyCanvas {
-            drawColor(0xFFF09609.toInt())
-            drawCircle(540f, 360f, 240f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE })
-        }
-        show(context, "photo") {
-            setContentTitle("Instagram")
-            setContentText("alex liked your photo")
-            setStyle(NotificationCompat.BigPictureStyle().bigPicture(picture))
-        }
+    fun postPhoto(context: Context) = show(context, "photo") {
+        setContentTitle("Instagram")
+        setContentText("alex liked your photo")
+        setStyle(NotificationCompat.BigPictureStyle().bigPicture(picture(1080, 720)))
     }
 
     /** Snapchat-like: plain, no actions. */
@@ -62,12 +60,36 @@ object Chats {
         setContentText("sent you a Snap")
     }
 
-    /** What adb and the buttons post: [chat] is "alex", "family", "photo" or "snap"; the last two ignore [text]. */
+    /** A dialer-like missed call from Alex, whose **Call back** and **Message** only log (§10). */
+    fun postCall(context: Context) = show(context, "call") {
+        setContentTitle("Alex")
+        setContentText("Missed call")
+        setCategory(NotificationCompat.CATEGORY_MISSED_CALL)
+        for ((i, label) in listOf("Call back", "Message").withIndex()) {
+            val press = Intent(context, ButtonReceiver::class.java).putExtra(BUTTON, label)
+            addAction(0, label, PendingIntent.getBroadcast(context, i, press, PendingIntent.FLAG_IMMUTABLE))
+        }
+    }
+
+    /** A photo from Alex in the alex chat, served by the notifier's own provider and granted to no app (§10). */
+    fun postPicture(context: Context) {
+        val file = File(context.cacheDir, "photos/picture.png").apply { parentFile?.mkdirs() }
+        file.outputStream().use { picture(720, 480).compress(Bitmap.CompressFormat.PNG, 100, it) }
+        // FileProvider's form: content://<authority>/<root name in photos.xml>/<file>. shortcut: built by hand, since
+        // getUriForFile compares paths with '/' and so throws under Robolectric on Windows; use it once tests run elsewhere.
+        val uri = Uri.parse("content://${context.packageName}.photos/photos/${file.name}")
+        val conversation = conversations.getValue("alex")
+        add(context, "alex", conversation, message("a photo", conversation.people.first()).setData("image/png", uri))
+    }
+
+    /** What adb and the buttons post: [chat] is "alex", "family", "photo", "snap", "call" or "picture"; the last four ignore [text]. */
     internal fun post(context: Context, chat: String, text: String) {
         when (chat) {
             "alex", "family" -> receive(context, chat, text)
             "photo" -> postPhoto(context)
             "snap" -> postSnap(context)
+            "call" -> postCall(context)
+            "picture" -> postPicture(context)
         }
     }
 
@@ -121,6 +143,12 @@ object Chats {
             .apply(build)
             .build()
         manager.notify(id, notification)
+    }
+
+    // Orange, with a white circle in the middle.
+    private fun picture(width: Int, height: Int) = createBitmap(width, height).applyCanvas {
+        drawColor(0xFFF09609.toInt())
+        drawCircle(width / 2f, height / 2f, height / 3f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE })
     }
 
     // A 128 px circle in the person's own colour, with their initial.
