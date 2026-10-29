@@ -146,4 +146,5 @@ Checked on the Galaxy S24 with the notifier debug app.
   - Home closes the window at once, without the swivel.
   - Android cuts a notification's text at 1,024 characters before LiquiWin reads it. LiquiWin's own cap is 2,000.
   - On a wide tile, a group's "Mum · Family" sender line fits. The medium tile still cuts it.
+  - A large tile's rows came out 184 px tall, and 8 messages gave a 208 px thumb. Halfway through a slow swipe, the list had scrolled and the tile's edges sat where they rest. Once a chat opened from a scrolled list is read, its rows leave and the list stays as far down as it can go, so the tile holds still until a new message or a swipe brings the list back to the top.
 - **Still to check:** replies from WhatsApp, Instagram, Messenger and Telegram, and Snapchat's window without a text box (Task 8, Step 5).
