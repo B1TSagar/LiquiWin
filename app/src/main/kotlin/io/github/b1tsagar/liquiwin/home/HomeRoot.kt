@@ -97,13 +97,14 @@ fun HomeRoot(deps: HomeDependencies, homePresses: Flow<HomePress>, modifier: Mod
     var isDefaultHome by remember { mutableStateOf(deps.isDefaultHome()) }
     val liveTiles by remember(deps) { deps.liveTiles?.status ?: MutableStateFlow(LiveTilesStatus()) }.collectAsStateWithLifecycle()
 
-    // Whether LiquiWin is fully on screen: not while another app covers it, until Android's animation bringing it back has
-    // finished (or 0.7 s after it resumes, on a phone that never says), and not while One UI's close-to-home animation
-    // plays after a Home press from an app, which outlasts that signal. Flips that bring a screen back wait for it.
+    // Whether LiquiWin is fully on screen: not from the moment an app opening over it pauses LiquiWin (Back while the app
+    // is still opening resumes LiquiWin without ever stopping it), until Android's animation bringing it back has finished
+    // (or 0.7 s after it resumes, on a phone that never says), and not while One UI's close-to-home animation plays after
+    // a Home press from an app, which outlasts that signal. Flips that bring a screen back wait for it.
     var covered by remember { mutableStateOf(false) }
     var closingToHome by remember { mutableStateOf(false) }
     val onScreen = !covered && !closingToHome
-    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { covered = true }
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { covered = true }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         isDefaultHome = deps.isDefaultHome()
         deps.liveTiles?.onResume()

@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.click
@@ -25,6 +26,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.swipeUp
+import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.b1tsagar.liquiwin.core.data.apps.LauncherApp
@@ -46,6 +48,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -207,5 +210,33 @@ class HomeRootTest { // Review Focus 5
         press(HomePress.FROM_APP)
         compose.onNodeWithText("see you at 6").assertDoesNotExist()
         compose.onNodeWithTag("tile-1").assertExists()
+    }
+
+    // The owner's report: Back while an app was still opening left start empty. Android pauses LiquiWin as an app opens
+    // and stops it only once the app has opened, so Back before then resumes LiquiWin without ever stopping it.
+    @Test fun backWhileAnAppIsStillOpeningBringsTheTilesBack() {
+        show(pinned = listOf(camera))
+        openAndBackBeforeStopped { compose.onNodeWithTag("tile-1") }
+    }
+
+    @Test fun backWhileAnAppIsStillOpeningBringsTheAppListBack() {
+        show()
+        swipeToAppList()
+        openAndBackBeforeStopped { compose.onNodeWithText("Maps") }
+    }
+
+    // Taps [node], which turnstiles away and opens its app within 1 s, pausing LiquiWin. Back comes before Android stops
+    // it, and the node must turn back to where it rested.
+    private fun openAndBackBeforeStopped(node: () -> SemanticsNodeInteraction) {
+        val rest = node().getBoundsInRoot()
+        compose.mainClock.autoAdvance = false
+        node().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        assertNotEquals(rest, node().getBoundsInRoot()) // turned away
+        compose.activityRule.scenario.moveToState(Lifecycle.State.STARTED)
+        compose.mainClock.advanceTimeBy(300) // still opening
+        compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        compose.mainClock.advanceTimeBy(3_000)
+        assertEquals(rest, node().getBoundsInRoot())
     }
 }
