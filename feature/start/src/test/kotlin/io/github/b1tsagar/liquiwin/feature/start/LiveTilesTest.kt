@@ -308,6 +308,9 @@ class LiveTilesTest {
         chat.itemState.value = listOf(testItem("b", text = "running late", at = 20, source = chat.id)) + chat.itemState.value
         assertTrue(saidOver(1, 3_000).all { it == "history, 1 unread, Alex: see you" })
         compose.onNodeWithTag("tile-1").performTouchInput { moveBy(Offset(0f, -height / 4f)); up() }
+        // Android applies the lift's state at once. The test clock applies it only when a coroutine next resumes, as the
+        // timer's does at random gaps, so about 1 run in 10 had none within 2 s and stayed on history.
+        compose.waitForIdle()
         compose.mainClock.advanceTimeBy(2_000)
         assertEquals("1 unread, Alex: running late", said(1))
     }
