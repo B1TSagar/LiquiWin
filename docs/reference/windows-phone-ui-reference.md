@@ -147,7 +147,7 @@ Checked on the Galaxy S24 with the notifier debug app.
   - Android cuts a notification's text at 1,024 characters before LiquiWin reads it. LiquiWin's own cap is 2,000.
   - On a wide tile, a group's "Mum · Family" sender line fits. The medium tile still cuts it.
   - A large tile's rows came out 184 px tall, and 8 messages gave a 208 px thumb. Halfway through a slow swipe, the list had scrolled and the tile's edges sat where they rest. Once a chat opened from a scrolled list is read, its rows leave and the list stays as far down as it can go, so the tile holds still until a new message or a swipe brings the list back to the top.
-- **Still to check:** replies from WhatsApp, Instagram, Messenger and Telegram, and Snapchat's window without a text box (Task 8, Step 5).
+- **Found in the owner's check:** real replies sent from the window arrived in WhatsApp, Instagram, Messenger and Telegram, and WhatsApp's copy came back as the owner's own bubble. Snapchat's window has no text box. Each window took the keyboard with it as it closed.
 
 ## Values chosen for tile gestures
 
@@ -173,4 +173,5 @@ Checked on the Galaxy S24 with the notifier debug app.
   - Emoji showed on the tile and in the window, with every code point in the accessibility text.
   - The tile held the GIF's first frame. In the window the GIF swapped frames every 0.5 s from the moment the window opened, swapped last 4.6 s in, then held. A tap played it again for 5 s, then it held again.
   - The moving photo had no accessibility node at first, so TalkBack couldn't reach it. Compose hands accessibility an `AndroidView` as the bare view, without the semantics set on it, so they now sit on a wrapper that clears the view's own. On the Galaxy the photo is now one clickable button described as "photo".
-- **Still to check:** a real missed call's buttons, whether its tile names the caller or reads "Missed call", and a photo and a moving sticker from a real chat (Task 9, Step 5). TalkBack's explore by touch on a moving photo, since TalkBack stays off on the Galaxy. Also a swipe down on a scrolled start, once start scrolls.
+- **Found in the owner's check:** a real missed call's tile named the caller and showed the dialer's own **call back** and **message**. **call back** called back, tapped or swiped left. A photo and a moving sticker from a real chat showed as the values above say.
+- **Still to check:** TalkBack's explore by touch on a moving photo, since TalkBack stays off on the Galaxy. Also a swipe down on a scrolled start, once start scrolls.
