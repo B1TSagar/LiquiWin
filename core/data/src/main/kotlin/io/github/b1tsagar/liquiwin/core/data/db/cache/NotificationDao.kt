@@ -56,6 +56,10 @@ abstract class NotificationDao {
     @Query("SELECT `key` FROM notification_item WHERE `key` IN (:keys)")
     abstract suspend fun existingKeys(keys: List<String>): List<String>
 
+    /** The keys of stored items with a photo, or with one LiquiWin couldn't read. */
+    @Query("SELECT `key` FROM notification_item WHERE `key` IN (:keys) AND (image_file IS NOT NULL OR photo_unreadable)")
+    abstract suspend fun keysWithPhotos(keys: List<String>): List<String>
+
     @Query("SELECT * FROM notification_item WHERE `key` = :key")
     abstract suspend fun item(key: String): NotificationItemEntity?
 
@@ -73,7 +77,10 @@ abstract class NotificationDao {
         val stored = existingKeys(items.map { it.key }).toSet()
         insert(items.filter { it.key !in stored })
         // A stored key already fixes the sender, text and time, so only where it's showing changes, and its images stay.
-        for (item in items) if (item.key in stored) refresh(item.key, notificationKey, item.conversationTitle, item.shortcutId)
+        // A photo it lacked can come, though: WhatsApp posts a photo's message again once the photo has downloaded.
+        for (item in items) if (item.key in stored) {
+            refresh(item.key, notificationKey, item.conversationTitle, item.shortcutId, item.imageFile, item.photoUnreadable)
+        }
         return gone.files()
     }
 
@@ -142,11 +149,14 @@ abstract class NotificationDao {
     @Query(
         """
         UPDATE notification_item SET notification_key = :notificationKey, conversation_title = :conversationTitle,
-            shortcut_id = :shortcutId, removed_at = NULL
+            shortcut_id = :shortcutId, removed_at = NULL, image_file = COALESCE(image_file, :imageFile),
+            photo_unreadable = photo_unreadable OR :photoUnreadable
         WHERE `key` = :key
         """,
     )
-    protected abstract suspend fun refresh(key: String, notificationKey: String, conversationTitle: String?, shortcutId: String?)
+    protected abstract suspend fun refresh(
+        key: String, notificationKey: String, conversationTitle: String?, shortcutId: String?, imageFile: String?, photoUnreadable: Boolean,
+    )
 
     @Query("UPDATE notification_item SET removed_at = :now WHERE notification_key = :notificationKey AND removed_at IS NULL")
     protected abstract suspend fun setRemoved(notificationKey: String, now: Long)

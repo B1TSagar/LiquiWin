@@ -101,8 +101,17 @@ class NotificationDaoTest {
 
     @Test fun aRepostedItemKeepsItsPhotoFlag() = runTest {
         dao.replaceNotification("n1", listOf(item("a", 100).copy(photoUnreadable = true)))
-        dao.replaceNotification("n1", listOf(item("a", 100))) // the intake reads photos only for new messages
+        dao.replaceNotification("n1", listOf(item("a", 100))) // the intake reads a photo only for a message without one
         assertTrue(dao.item("a")!!.photoUnreadable)
+    }
+
+    // WhatsApp posts a photo's message before the photo has downloaded, then again with it.
+    @Test fun aRepostGivesAnItemThePhotoItLacked() = runTest {
+        dao.replaceNotification("n1", listOf(item("a", 100), item("b", 100)))
+        dao.replaceNotification("n1", listOf(item("a", 100).copy(imageFile = "a.webp"), item("b", 100).copy(photoUnreadable = true)))
+        dao.replaceNotification("n1", listOf(item("a", 100), item("b", 100))) // and keeps it
+        assertEquals("a.webp", dao.item("a")!!.imageFile)
+        assertTrue(dao.item("b")!!.photoUnreadable)
     }
 
     @Test fun cleanUpKeepsTheNewest50PerSourceWithinTheWindowAndReturnsTheDeletedFiles() = runTest {

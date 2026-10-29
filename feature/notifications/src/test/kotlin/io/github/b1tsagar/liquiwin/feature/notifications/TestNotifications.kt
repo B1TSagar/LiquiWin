@@ -88,6 +88,13 @@ internal fun telegramPhoto(): Notification = builder()
     )
     .build()
 
+/** A photo from Alex, as WhatsApp posts it before the photo has downloaded, and again once it has. */
+internal fun whatsAppPhoto(downloaded: Boolean = true): Notification {
+    val message = MessagingStyle.Message("📷 Photo", 1_000, alex)
+    if (downloaded) message.setData("image/jpeg", Uri.parse("content://com.whatsapp.provider/media/1"))
+    return builder().setStyle(MessagingStyle(you).addMessage(message)).setShortcutId("alex").build()
+}
+
 /** A dialer's missed call from Alex, with [labels] as its buttons, then [replyLabel]'s button that takes a reply. */
 internal fun missedCall(labels: List<String> = listOf("Call back", "Message"), replyLabel: String? = null): Notification = builder()
     .setContentTitle("Alex").setContentText("Missed call").setCategory(NotificationCompat.CATEGORY_MISSED_CALL).setWhen(3_000)

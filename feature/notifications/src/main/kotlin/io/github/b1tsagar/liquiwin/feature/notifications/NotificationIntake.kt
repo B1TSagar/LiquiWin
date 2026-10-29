@@ -72,10 +72,14 @@ class NotificationIntake(
         if (items.isEmpty()) return
         // Before the items, so a stored item never shows without its actions.
         actions.put(normalised.notificationKey, LiveActions(normalised.contentIntent, normalised.replyAction, normalised.buttons))
-        val stored = dao.existingKeys(items.map { it.key }).toSet()
+        val keys = items.map { it.key }
+        val stored = dao.existingKeys(keys).toSet()
+        val withPhotos = dao.keysWithPhotos(keys).toSet()
         val entities = items.map { item ->
             val isNew = item.key !in stored // a stored item keeps the images it has
-            val imageFile = if (isNew) item.image?.let { images.save(it, ImageStore.IMAGE_PX) } else null
+            // ...but WhatsApp posts a photo's message before the photo has downloaded, then again with it.
+            val needsPhoto = item.key !in withPhotos
+            val imageFile = if (needsPhoto) item.image?.let { images.save(it, ImageStore.IMAGE_PX) } else null
             NotificationItemEntity(
                 key = item.key,
                 notificationKey = normalised.notificationKey,
@@ -91,7 +95,7 @@ class NotificationIntake(
                 removedAt = null,
                 isSelf = item.isSelf,
                 // Most chat apps let only Android's own panel read a photo, so the chat window shows a card (§5.7).
-                photoUnreadable = isNew && item.image != null && imageFile == null,
+                photoUnreadable = needsPhoto && item.image != null && imageFile == null,
             )
         }
         images.delete(dao.replaceNotification(normalised.notificationKey, entities))

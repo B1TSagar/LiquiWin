@@ -68,6 +68,16 @@ class NotificationIntakeTest {
         assertNotNull(stored.imageFile)
     }
 
+    // The owner's report from WhatsApp, which posts a photo's message again once the photo has downloaded
+    @Test fun aPhotoThatComesInALaterPostOfItsMessageIsStored() = runTest {
+        val intake = intake()
+        intake.posted(sbn("com.whatsapp", whatsAppPhoto(downloaded = false)))
+        intake.posted(sbn("com.whatsapp", whatsAppPhoto()))
+        intake.posted(sbn("com.whatsapp", whatsAppChat(listOf("later" to 2_000L)), id = 2)) // handled after the photo
+        val photo = items { it.size == 2 }.single { it.item.text == "📷 Photo" }.item
+        assertTrue(photo.photoUnreadable) // nothing grants LiquiWin WhatsApp's provider here, so it shows as a card
+    }
+
     // Review Focus 3
     @Test fun aRemovalRightAfterItsPostLeavesTheItemRemoved() = runTest {
         val chat = sbn("com.whatsapp", whatsAppChat())
