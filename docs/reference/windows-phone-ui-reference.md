@@ -127,3 +127,22 @@ Checked on the Galaxy S24 with the notifier debug app (`tools/notifier`).
 - **Store:** messages are kept 24 hours, 50 per app. Avatars are stored at 256 px and images at 720 px, as WebP at quality 85. Senders and titles are cut at 200 characters, text at 2,000. A message dated more than an hour ahead of the phone's clock isn't stored.
 - **Found during the Galaxy check:** a new message shows on its tile within 0.75 s of being posted, and the tile turns to it about 0.9 s after. On a medium tile, a group's "Mum · Family" sender line is cut to "Mum · F…", which needs a follow-up. On One UI, "fix" opens Android's notification access list with LiquiWin's row highlighted, Samsung's form of the per-app page.
 - **Still to check:** real apps over a few days (Task 12, Step 6), and whether the listener stays bound for a day (success criterion 7, Step 8).
+
+## Values chosen for the chat window
+
+Checked on the Galaxy S24 with the notifier debug app.
+
+- **Flip:** the camera sits 21 tile heights away (`cameraDistance` = 21 × height ÷ 72, in Skia's camera units of 72 px), so the nearer edge is at most 1.049 times as wide as the farther one. The Galaxy measured 1.033 at most.
+- **Chat button:** a 16 WP px chat glyph at the end of the label strip, and at the end of each large-tile row, with a 48 dp touch target in the tile's bottom-right corner. It opens that item's chat window. TalkBack reaches it as the tile's "chat with …" action.
+- **Swivel:** in from −45° to 0 over 350 ms with exponent-6 easing out. Out from 0 to 90° over 250 ms with exponent-15 easing in, so most of that turn happens in its last 40 ms. Both turn around the panel's horizontal centre line, with Tilt's camera (12 × density).
+- **Window:** a 60% black scrim, with the panel at most 80% of the height left above the keyboard. Bubbles have 12 WP px tails (top left for theirs, bottom right for yours), leave 72 WP px free on the far side, pad their text 12 WP px across and 8 down, and sit 12 WP px apart. Yours are the accent mixed 30% toward black. The header has a 40 WP px avatar and a 24 WP px app icon. **open in app** and **hide this chat** sit 24 WP px apart, each in a 48 dp touch target.
+- **Scrollbar:** a thumb 4 WP px wide and at least 24 WP px long, along the right edge while the bubbles overflow. The window opens scrolled to the end of the newest message.
+- **Replying:** the text box takes focus with the keyboard up and grows to 4 lines. Enter adds a line, and only **send** sends. A reply shows "sending…" until the app's re-post replaces it, for 10 s at most. If the reply action is gone, the window shows "Couldn't send. Open <app> to reply." with **open**, and keeps the text.
+- **Hidden chats:** **hide this chat** shows only for a messaging chat or group, not for a plain notification. In edit mode, a tile with hidden chats gets a **hidden chats** corner at its bottom left, the same 48 dp corner button as unpin and resize. Its list sits at the bottom over a 60% scrim, with a 48 dp row and **show again** for each chat.
+- **Found during the Galaxy check:**
+  - A chat lost its history when its notification was cleared and the app posted again. Fixed: a post now replaces only the items that notification's last showing post had. Messages an app trims from a notification that's still showing still go, as an edit would. Telling the two apart needs the store to know a chat's messages from a plain notification's text, which is a `cache.db` change.
+  - With the keyboard up, the first Back closes the keyboard and the second the window, as everywhere on Android.
+  - Home closes the window at once, without the swivel.
+  - Android cuts a notification's text at 1,024 characters before LiquiWin reads it. LiquiWin's own cap is 2,000.
+  - On a wide tile, a group's "Mum · Family" sender line fits. The medium tile still cuts it.
+- **Still to check:** replies from WhatsApp, Instagram, Messenger and Telegram, and Snapchat's window without a text box (Task 8, Step 5).
