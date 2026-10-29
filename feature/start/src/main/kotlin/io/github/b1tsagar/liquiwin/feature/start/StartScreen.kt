@@ -505,11 +505,11 @@ private fun TileSlot(
             .collect { item ->
                 delay(controller.ticker.jumpDelayMs(tile.id, withFrameMillis { it }))
                 snapshotFlow { touched }.first { !it }
-                val to = currentFaces.firstOrNull { f -> f.shownItems.any { it.key == item.key } }
-                if (to is TileFace.Stack && !stack.isScrollInProgress) stack.scrollToItem(0) // the new item is the list's top row
-                if (to == null || to.key == liveFace.face) return@collect
+                val to = currentFaces.firstOrNull { f -> f.shownItems.any { it.key == item.key } } ?: return@collect
+                // Showing it is the tile's move, even in a list already showing, so the tile sits out the next ticks (§5.4).
                 controller.ticker.jumped(tile.id, withFrameMillis { it })
-                liveFace.flipTo(to.key)
+                if (to is TileFace.Stack && !stack.isScrollInProgress) stack.scrollToItem(0) // the new item is the list's top row
+                if (to.key != liveFace.face) liveFace.flipTo(to.key)
             }
     }
 

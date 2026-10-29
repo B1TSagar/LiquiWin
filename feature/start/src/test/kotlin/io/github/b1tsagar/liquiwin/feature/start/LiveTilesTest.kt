@@ -181,7 +181,8 @@ class LiveTilesTest {
         compose.mainClock.advanceTimeBy(2_500L + TILE_FLIP_MS)
         page(1, "older messages")
         chat.itemState.value = listOf(testItem("m7", title = "P7", text = "t7", at = 7, source = chat.id)) + chat.itemState.value
-        compose.mainClock.advanceTimeBy(1_000)
+        // The new item's move rests the tile for 3 ticks, at least 0.3 s, so the timer can't turn it away before this.
+        compose.mainClock.advanceTimeBy(200)
         assertEquals("8 unread, P7: t7, P6: t6, P5: t5", said(1))
     }
 
