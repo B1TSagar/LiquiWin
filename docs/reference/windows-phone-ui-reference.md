@@ -148,3 +148,21 @@ Checked on the Galaxy S24 with the notifier debug app.
   - On a wide tile, a group's "Mum · Family" sender line fits. The medium tile still cuts it.
   - A large tile's rows came out 184 px tall, and 8 messages gave a 208 px thumb. Halfway through a slow swipe, the list had scrolled and the tile's edges sat where they rest. Once a chat opened from a scrolled list is read, its rows leave and the list stays as far down as it can go, so the tile holds still until a new message or a swipe brings the list back to the top.
 - **Still to check:** replies from WhatsApp, Instagram, Messenger and Telegram, and Snapchat's window without a text box (Task 8, Step 5).
+
+## Values chosen for tile gestures
+
+Checked on the Galaxy S24 with the notifier debug app.
+
+- **Swipes:** on a message's face, a swipe that passes the touch slop more across than down is the message's: left opens its chat window, right clears it. On the history page a message moves only left. A front or a label strip has no message, so a sideways swipe there turns start's pager. A swipe down that passes the slop more down than across turns the tile, but only if start was at its top when the finger came down, and a large tile's list at its own. Otherwise start, or the list, scrolls. Each takes effect at a third of the tile's width, or of its height for a swipe down, or at a 600 dp/s flick, the pager's.
+- **Underlay:** beneath a swiped message, the accent mixed 30% toward black, as your bubbles are. It reads **reply** at its end as the message moves left, or **clear** at its start as it moves right, in one line of the label strip's type at the label's inset.
+- **Slides:** 200 ms, back or out. A cleared message stays out until it has left the tile, for at most 1 s, then slides back. The next sideways swipe cuts a slide short, but never the clear.
+- **A missed call's buttons:** the call's own, in its app's order, in place of the chat button. On a medium or wide tile they share the tile's foot, half each, 8 WP px up from its bottom edge, and the tile's label gives way. Each is at least 48 × 48 dp, with its label lowercase in the label strip's type, shrinking to 14 WP px before it's cut with "…". On a large tile they sit at the row's bottom end at their natural widths, and the call's text keeps to one line. On medium and wide tiles a button's 48 dp touch area reaches over the lowest line of text above it, so a tap there presses the button. A hold past a tap is the tile's long-press, and a swipe the tile claims cancels the press. The first layout, at the strip's end beside the label, squeezed the second button to 36 dp on a 360 dp phone.
+- **Photo card:** a photo LiquiWin can't read shows in its bubble as **photo · open in \<app\>**, at least 48 dp tall and padded 12 WP px across. It opens the chat in its app, as **open in app** does.
+- **Found during the Galaxy check:**
+  - A swipe right takes the notification out of Android's panel too. A slow swipe of about 106 dp over 1.5 s, with no flick, cleared as well. Under 0.5 s after the lift, the tile already showed its front.
+  - The new messages page held its message through 30 s of shots, and the second swipe down showed the front at once. With nothing unread, the swipe down showed history.
+  - The underlay came out 13,98,140 under the blue accent 27,161,226. Compose's `lerp` mixes in Oklab, where a plain 70% would give 19,113,158.
+  - Pressing a call's button marks the call read, so the tile stops turning to it.
+  - LiquiWin could read the notifier's photo, though its provider grants no app access, since Android passes a notification's URIs on to its listener. So the photo showed on the tile and in its bubble, and the card shows only where an app's photo can't be read at all.
+  - Start on this phone holds six tiles and doesn't scroll, so a swipe down on a scrolled start was left to its Compose test.
+- **Still to check:** a real missed call's buttons, whether its tile names the caller or reads "Missed call", and a photo from a real chat (Task 9, Step 5). Also a swipe down on a scrolled start, once start scrolls.
