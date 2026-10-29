@@ -79,7 +79,7 @@ class NotificationIntake(
             val isNew = item.key !in stored // a stored item keeps the images it has
             // ...but WhatsApp posts a photo's message before the photo has downloaded, then again with it.
             val needsPhoto = item.key !in withPhotos
-            val imageFile = if (needsPhoto) item.image?.let { images.save(it, ImageStore.IMAGE_PX) } else null
+            val imageFile = if (needsPhoto) item.image?.let(images::savePhoto) else null
             NotificationItemEntity(
                 key = item.key,
                 notificationKey = normalised.notificationKey,

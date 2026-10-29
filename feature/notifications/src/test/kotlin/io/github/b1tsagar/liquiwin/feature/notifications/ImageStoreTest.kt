@@ -1,10 +1,13 @@
 package io.github.b1tsagar.liquiwin.feature.notifications
 
 import android.graphics.Bitmap
+import android.net.Uri
 import androidx.core.graphics.drawable.IconCompat
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.b1tsagar.liquiwin.core.testing.movingGif
 import java.io.File
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -13,6 +16,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(AndroidJUnit4::class)
 class ImageStoreTest {
@@ -36,6 +40,22 @@ class ImageStoreTest {
     @Test fun anUnreadableIconGivesNull() {
         assertNull(store.save(IconCompat.createWithContentUri("content://nowhere/1"), ImageStore.IMAGE_PX))
         assertEquals(emptyList<String>(), store.dir.list().orEmpty().toList())
+    }
+
+    // Telling a moving picture from a still takes a real decoder, which Robolectric's legacy graphics lack.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test fun aSmallMovingPhotoIsKeptAsItCame() {
+        val gif = folder.newFile("moving.gif").apply { writeBytes(movingGif()) }
+        val name = store.savePhoto(IconCompat.createWithContentUri(Uri.fromFile(gif)))
+        assertArrayEquals(movingGif(), File(store.dir, name!!).readBytes())
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test fun aMovingPhotoOver720PxIsKeptStill() {
+        val wide = movingGif().also { it[6] = 0xD1.toByte(); it[7] = 0x02 } // 721 px across
+        val gif = folder.newFile("wide.gif").apply { writeBytes(wide) }
+        val name = store.savePhoto(IconCompat.createWithContentUri(Uri.fromFile(gif)))
+        assertEquals("WEBP", File(store.dir, name!!).readBytes().copyOfRange(8, 12).decodeToString())
     }
 
     @Test fun deleteRemovesTheFiles() {

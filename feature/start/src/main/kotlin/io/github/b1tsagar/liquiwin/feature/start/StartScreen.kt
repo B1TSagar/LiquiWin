@@ -2,7 +2,6 @@ package io.github.b1tsagar.liquiwin.feature.start
 
 import android.app.ActivityOptions
 import android.graphics.Rect
-import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -95,6 +94,7 @@ import io.github.b1tsagar.liquiwin.core.data.apps.LauncherApp
 import io.github.b1tsagar.liquiwin.core.design.components.WpText
 import io.github.b1tsagar.liquiwin.core.design.motion.Turnstile
 import io.github.b1tsagar.liquiwin.core.design.motion.TurnstileClock
+import io.github.b1tsagar.liquiwin.core.design.motion.animatorOn
 import io.github.b1tsagar.liquiwin.core.design.motion.tileFlipCameraDistance
 import io.github.b1tsagar.liquiwin.core.design.motion.tilt
 import io.github.b1tsagar.liquiwin.core.design.motion.turnstile
@@ -236,9 +236,8 @@ fun StartScreen(
     // Live tiles move only while they can be seen: start shown and on screen, LiquiWin resumed, outside edit mode, not
     // paused, and with Android's animations on, which is read again on every resume.
     val lifecycleState by lifecycle.currentStateAsState()
-    fun animatorOn() = Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) != 0f
-    var animationsOn by remember { mutableStateOf(animatorOn()) }
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { animationsOn = animatorOn() }
+    var animationsOn by remember { mutableStateOf(animatorOn(context)) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { animationsOn = animatorOn(context) }
     val moving = shown && onScreen && lifecycleState.isAtLeast(Lifecycle.State.RESUMED) && state.edit == null &&
         !liveTilesPaused && animationsOn
     LaunchedEffect(moving) {

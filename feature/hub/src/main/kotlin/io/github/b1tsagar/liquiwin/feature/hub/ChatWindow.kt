@@ -212,7 +212,7 @@ private fun Bubbles(window: ChatWindowState, app: String, side: Dp, modifier: Mo
 
 // Incoming bubbles sit left in the accent colour with a top-left tail; yours sit right in a darker shade with a
 // bottom-right tail. TalkBack reads each, with its sender and time, as one item. A photo LiquiWin couldn't read is a
-// [photoCard] in its place, a button of its own.
+// [photoCard] in its place, a button of its own, as a moving photo is.
 @Composable
 private fun Bubble(text: String?, image: ImageRef?, mine: Boolean, sender: String?, time: String, photoCard: String? = null, onPhoto: () -> Unit = {}) {
     val units = LocalWpUnits.current
@@ -230,9 +230,7 @@ private fun Bubble(text: String?, image: ImageRef?, mine: Boolean, sender: Strin
         if (sender != null) WpText(sender, type.small, color = colors.subtle)
         if (!mine) Box(tail)
         Column(Modifier.background(fill)) {
-            image?.let { ref ->
-                rememberImage(ref.file)?.let { Image(it, contentDescription = "photo", Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth) }
-            }
+            image?.let { Photo(it.file) }
             photoCard?.let {
                 Box(
                     Modifier.heightIn(min = 48.dp).clickable(role = Role.Button, onClick = onPhoto).padding(horizontal = units.dp(12f)),
