@@ -66,6 +66,7 @@ import io.github.b1tsagar.liquiwin.core.data.apps.AppIcon
 import io.github.b1tsagar.liquiwin.core.design.components.IconImage
 import io.github.b1tsagar.liquiwin.core.design.components.WpText
 import io.github.b1tsagar.liquiwin.core.design.components.rememberImage
+import io.github.b1tsagar.liquiwin.core.design.components.scrollThumb
 import io.github.b1tsagar.liquiwin.core.design.motion.Swivel
 import io.github.b1tsagar.liquiwin.core.design.motion.swivelAngle
 import io.github.b1tsagar.liquiwin.core.design.style.LocalStyleFacets
@@ -137,7 +138,16 @@ fun ChatWindow(viewModel: ChatViewModel, catalog: AppCatalog, modifier: Modifier
                 Row(Modifier.fillMaxWidth().padding(start = side, end = side, top = units.dp(12f)), verticalAlignment = Alignment.CenterVertically) {
                     shown.chat.avatar?.let { Avatar(it) }
                     WpText(shown.chat.title, type.listItem, Modifier.weight(1f), maxLines = 1)
-                    IconImage(appIcon?.bitmap, units.dp(24f))
+                    // The app's icon opens the chat in its app, as "open in app" does.
+                    Box(
+                        Modifier
+                            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                            .clickable(role = Role.Button, onClick = viewModel::openInApp)
+                            .semantics { contentDescription = "open in ${app?.label ?: "app"}" },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        IconImage(appIcon?.bitmap, units.dp(24f))
+                    }
                 }
                 Row(Modifier.padding(horizontal = side), horizontalArrangement = Arrangement.spacedBy(units.dp(24f))) {
                     TextButton("open in app", onClick = viewModel::openInApp)

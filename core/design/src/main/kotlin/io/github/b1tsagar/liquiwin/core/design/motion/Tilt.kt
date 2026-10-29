@@ -39,7 +39,8 @@ fun tiltFor(touch: Offset, size: Size): Tilt {
 
 /**
  * Tilts the element toward the finger. It only watches pointer events, so taps and long-presses still reach the
- * modifiers after it. After release it holds for 200 ms, then returns to rest over 100 ms.
+ * modifiers after it. After release, or once a scroll inside it takes the finger as a pan did on the phone, it holds
+ * for 200 ms, then returns to rest over 100 ms.
  */
 fun Modifier.tilt(enabled: Boolean = true): Modifier = if (!enabled) this else composed {
     var tilt by remember { mutableStateOf(Tilt(0f, 0f, 0f)) }
@@ -54,7 +55,7 @@ fun Modifier.tilt(enabled: Boolean = true): Modifier = if (!enabled) this else c
             scope.launch { amount.snapTo(1f) }
             while (true) {
                 val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
-                if (!change.pressed) break
+                if (!change.pressed || change.isConsumed) break
                 tilt = tiltFor(change.position, size.toSize())
             }
             release = scope.launch {

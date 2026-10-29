@@ -12,11 +12,12 @@ class TileStateTest {
     private val a = FakeTileSource(SourceId("app:a@0"))
     private val b = FakeTileSource(SourceId("app:b@0"))
 
-    @Test fun theRotationIsUnreadItemsNewestFirstAtMostFive() = runTest {
+    // A large tile lists them all (§5.1), so the cap of five is the medium and wide faces'.
+    @Test fun theRotationIsEveryUnreadItemNewestFirst() = runTest {
         a.itemState.value = listOf(testItem("read", at = 99, unread = false, source = a.id)) +
             (7 downTo 1).map { testItem("m$it", at = it * 10L, source = a.id) }
         val state = tileState(listOf(a)).first()
-        assertEquals(listOf("m7", "m6", "m5", "m4", "m3"), state.rotation.map { it.key })
+        assertEquals(listOf("m7", "m6", "m5", "m4", "m3", "m2", "m1"), state.rotation.map { it.key })
         assertEquals(7, state.unread)
     }
 

@@ -6,11 +6,13 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -22,6 +24,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.b1tsagar.liquiwin.core.design.theme.LiquiWinTheme
 import io.github.b1tsagar.liquiwin.core.testing.FakeAppCatalog
@@ -73,6 +76,15 @@ class ChatWindowTest {
         compose.onNodeWithTag("chat-input").assertDoesNotExist()
         compose.onNodeWithText("open in app").performClick()
         assertEquals(listOf<TileItem?>(quiet.item), source.opened)
+        assertNull(vm.window.value)
+    }
+
+    // The owner's call after using it: the app's icon opens the chat in its app too, as "open in app" does
+    @Test fun theAppsIconOpensTheChatInItsApp() {
+        val b = testMessage("b", at = 1)
+        open(testChat(a, b))
+        compose.onNodeWithContentDescription("open in Chat").assertWidthIsAtLeast(48.dp).assertHeightIsAtLeast(48.dp).performClick()
+        assertEquals(listOf<TileItem?>(b.item), source.opened) // the newest message's link
         assertNull(vm.window.value)
     }
 

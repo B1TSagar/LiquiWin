@@ -12,12 +12,17 @@ class TileFacesTest {
         assertEquals(listOf(TileFace.Front), faces(TileSize.SMALL, items))
     }
 
-    @Test fun mediumAndWideTilesHaveOneFacePerItem() {
-        for (size in listOf(TileSize.MEDIUM, TileSize.WIDE)) assertEquals(listOf("front", "c", "b", "a", "z"), faces(size, items).map { it.key })
+    @Test fun mediumAndWideTilesHaveOneFaceForEachOfTheFiveNewest() {
+        val seven = (7 downTo 1).map { testItem("m$it", at = it * 10L) }
+        for (size in listOf(TileSize.MEDIUM, TileSize.WIDE)) {
+            assertEquals(listOf("front", "c", "b", "a", "z"), faces(size, items).map { it.key })
+            assertEquals(listOf("front", "m7", "m6", "m5", "m4", "m3"), faces(size, seven).map { it.key })
+        }
     }
 
-    @Test fun largeTilesStackTheThreeNewest() {
-        assertEquals(listOf(TileFace.Front, TileFace.Stack(items.take(3))), faces(TileSize.LARGE, items))
+    // The owner's call: a large tile lists every unread message, to pick one to reply to
+    @Test fun largeTilesListEveryItem() {
+        assertEquals(listOf(TileFace.Front, TileFace.Stack(items)), faces(TileSize.LARGE, items))
     }
 
     @Test fun anEmptyRotationLeavesOnlyTheFront() {

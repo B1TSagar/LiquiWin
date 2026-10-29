@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -100,6 +101,9 @@ import io.github.b1tsagar.liquiwin.core.tiles.source.TileItem
 import io.github.b1tsagar.liquiwin.core.tiles.source.TileState
 import io.github.b1tsagar.liquiwin.feature.start.layout.Cell
 import io.github.b1tsagar.liquiwin.feature.start.live.LABEL_STRIP_WP_PX
+import io.github.b1tsagar.liquiwin.feature.start.live.STACK_SIZE
+import io.github.b1tsagar.liquiwin.feature.start.live.StackLayout
+import io.github.b1tsagar.liquiwin.feature.start.live.StackRow
 import io.github.b1tsagar.liquiwin.feature.start.live.TileFace
 import io.github.b1tsagar.liquiwin.feature.start.live.TileFlipState
 import io.github.b1tsagar.liquiwin.feature.start.live.TileTicker
@@ -373,21 +377,47 @@ private fun TileSlot(
     // A flip draws the old face until it's edge-on at 90°.
     val firstHalf by remember { derivedStateOf { liveFace.from != null && liveFace.angle < 90f } }
     val drawn = if (!still && firstHalf) tileFaces.firstOrNull { it.key == liveFace.from } ?: TileFace.Front else face
+    // A large tile's list keeps its place while the tile turns. Its rows start below the tile's top inset (§5.1).
+    val stack = rememberLazyListState()
+    val insetPx = with(LocalDensity.current) { LocalWpUnits.current.dp(TILE_INSET_WP_PX).toPx() }
+    val stackLayout = {
+        val info = stack.layoutInfo
+        StackLayout(
+            info.visibleItemsInfo.map { StackRow(it.index, insetPx + it.offset, insetPx + it.offset + it.size) },
+            top = insetPx,
+            bottom = insetPx + info.viewportSize.height,
+        )
+    }
     // A tap opens what's under the finger on the face drawn: its label strip and the front open the app (§5.5).
     val labelStripPx = with(LocalDensity.current) { LocalWpUnits.current.dp(LABEL_STRIP_WP_PX).toPx() }
-    val tapTarget by rememberUpdatedState { y: Float, heightPx: Float -> tileTapTarget(drawn, y, heightPx, labelStripPx) }
+    val tapTarget by rememberUpdatedState { y: Float, heightPx: Float -> tileTapTarget(drawn, y, heightPx, labelStripPx, stackLayout()) }
     val chatButtonPx = with(LocalDensity.current) { 48.dp.toPx() }
     val chatTarget by rememberUpdatedState { x: Float, y: Float, widthPx: Float, heightPx: Float ->
-        tileChatTarget(drawn, x, y, widthPx, heightPx, labelStripPx, chatButtonPx)
+        tileChatTarget(drawn, x, y, widthPx, heightPx, chatButtonPx, stackLayout())
     }
-    val lines = face.shownItems.map { listOfNotNull(it.title, it.text).joinToString(": ") }
+    // TalkBack hears and acts on a list's rows in view, and pages through the rest.
+    val first = if (face is TileFace.Stack) stack.firstVisibleItemIndex else 0
+    val shown = face.shownItems.drop(first).take(STACK_SIZE)
+    val scope = rememberCoroutineScope()
+    val pages = if (face !is TileFace.Stack) emptyList() else listOfNotNull(
+        CustomAccessibilityAction("older messages") {
+            scope.launch { stack.animateScrollToItem((first + STACK_SIZE).coerceAtMost(face.items.lastIndex)) }
+            true
+        }.takeIf { stack.canScrollForward },
+        CustomAccessibilityAction("newer messages") {
+            scope.launch { stack.animateScrollToItem((first - STACK_SIZE).coerceAtLeast(0)) }
+            true
+        }.takeIf { stack.canScrollBackward },
+    )
+    val lines = shown.map { listOfNotNull(it.title, it.text).joinToString(": ") }
     val said = if (liveTilesPaused) "live tile paused" else (listOfNotNull("$unread unread".takeIf { unread > 0 }) + lines).joinToString(", ").ifEmpty { null }
 
     // The timer reaches the tile through the controller. A face that has gone, such as a read item's, gives way to the
     // front without a flip.
     val currentFaces by rememberUpdatedState(tileFaces)
+    val listScrolled by rememberUpdatedState(face is TileFace.Stack && stack.canScrollBackward)
     DisposableEffect(tile.id) {
-        controller.liveSlots[tile.id] = LiveSlot(liveFace, coords) { currentFaces }
+        controller.liveSlots[tile.id] = LiveSlot(liveFace, coords, held = { listScrolled }) { currentFaces }
         onDispose { controller.liveSlots.remove(tile.id) }
     }
     LaunchedEffect(tileFaces) { if (tileFaces.none { it.key == liveFace.face }) liveFace.snapTo(TileFace.Front.key) }
@@ -404,6 +434,7 @@ private fun TileSlot(
             .collect { item ->
                 delay(controller.ticker.jumpDelayMs(tile.id, withFrameMillis { it }))
                 val to = currentFaces.firstOrNull { f -> f.shownItems.any { it.key == item.key } }
+                if (to is TileFace.Stack && !stack.isScrollInProgress) stack.scrollToItem(0) // the new item is the list's top row
                 if (to == null || to.key == liveFace.face) return@collect
                 controller.ticker.jumped(tile.id, withFrameMillis { it })
                 liveFace.flipTo(to.key)
@@ -429,17 +460,18 @@ private fun TileSlot(
             .semantics {
                 contentDescription = tile.label
                 said?.let { stateDescription = it }
-                onClick { controller.tap(current, coords.value, editing, face.shownItems.firstOrNull()); true }
+                onClick { controller.tap(current, coords.value, editing, shown.firstOrNull()); true }
                 onLongClick { controller.longPress(current); true }
-                // A content face's tap opens its first item, so the app and a stack's other items get actions of their own.
+                // A content face's tap opens its first item in view, so the app and a list's other rows get actions of their own.
                 if (face != TileFace.Front) {
                     customActions = listOf(CustomAccessibilityAction("open ${tile.label}") { controller.tap(current, coords.value, editing); true }) +
-                        (face as? TileFace.Stack)?.items.orEmpty().drop(1).map { item ->
+                        shown.drop(1).map { item ->
                             CustomAccessibilityAction("open ${item.title}") { controller.tap(current, coords.value, editing, item); true }
                         } +
-                        face.shownItems.map { item ->
+                        shown.map { item ->
                             CustomAccessibilityAction("chat with ${item.title}") { controller.chat(current, coords.value, editing, item); true }
-                        }
+                        } +
+                        pages
                 }
             }
             .onPlaced { coords.value = it }
@@ -487,7 +519,7 @@ private fun TileSlot(
     ) {
         StartTileView(
             tile, metrics, icon, Modifier.clearAndSetSemantics {}.tilt(enabled = edit == null),
-            face = drawn, unread = unread, liveTilesPaused = liveTilesPaused,
+            face = drawn, unread = unread, liveTilesPaused = liveTilesPaused, stack = stack, scrollable = edit == null,
         )
         if (selected && controller.drag == null) {
             EditControls(
@@ -520,8 +552,8 @@ private class SeenRef {
     }
 }
 
-/** A tile as the live tiles' timer sees it: its face, where it is, and the faces it has now. */
-private class LiveSlot(val face: TileFlipState, val coords: CoordinatesRef, val faces: () -> List<TileFace>)
+/** A tile as the live tiles' timer sees it: its face, where it is, whether it's held where it is, and the faces it has now. */
+private class LiveSlot(val face: TileFlipState, val coords: CoordinatesRef, val held: () -> Boolean, val faces: () -> List<TileFace>)
 
 /** The items a face shows. */
 private val TileFace.shownItems: List<TileItem>
@@ -555,9 +587,12 @@ private class StartController(private val viewModel: StartViewModel) {
         return viewport.localBoundingBoxOf(coords, clipBounds = false).overlaps(viewport.size.toSize().toRect())
     }
 
-    /** One turn of the timer: a tile on screen with more than its front flips to its next face, and the turn ends with it. */
+    /**
+     * One turn of the timer: a tile on screen with more than its front flips to its next face, and the turn ends with it.
+     * A tile whose list is scrolled from its top stays as it is.
+     */
     suspend fun tickLive() {
-        val candidates = liveSlots.filterValues { it.faces().size > 1 && isShowing(it.coords.value) }
+        val candidates = liveSlots.filterValues { it.faces().size > 1 && !it.held() && isShowing(it.coords.value) }
         val slot = ticker.tick(candidates.keys)?.let(candidates::getValue) ?: return
         slot.face.flipTo(nextFace(slot.faces(), slot.face.face).key)
     }

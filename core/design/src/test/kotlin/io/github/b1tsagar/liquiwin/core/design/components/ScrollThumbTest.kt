@@ -1,4 +1,4 @@
-package io.github.b1tsagar.liquiwin.feature.hub
+package io.github.b1tsagar.liquiwin.core.design.components
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

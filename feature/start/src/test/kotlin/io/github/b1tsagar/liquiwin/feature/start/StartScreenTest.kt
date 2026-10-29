@@ -69,6 +69,19 @@ class StartScreenTest {
 
     private fun longPressCamera() = compose.onNodeWithTag("tile-1").performTouchInput { longClick() }
 
+    // Camera large, with [messages] unread messages from P(n-1), the newest, down to P0, then [more] medium tiles.
+    private fun showLarge(messages: Int, more: Int = 0, scroll: ScrollState? = null) {
+        Settings.Global.putFloat(compose.activity.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 0f) // the list shows at once
+        cameraSource.itemState.value = (messages - 1 downTo 0).map { testItem("m$it", title = "P$it", text = "t$it", at = it.toLong(), source = cameraSource.id) }
+        val apps = listOf(camera) + (1..more).map { testApp("App $it") }
+        catalog.apps.value = apps
+        val viewModel = show(pinned = apps, scroll = scroll)
+        repeat(2) { viewModel.cycleSize(1) } // medium, wide, large
+        compose.waitForIdle()
+    }
+
+    private fun saysCamera(said: String) = compose.onNodeWithTag("tile-1").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, said))
+
     // The tiles turnstile away first (0.4 s for three columns and then the tapped tile), and only then does the app open.
     @Test fun tappingATileFlipsTheTilesAwayThenOpensItsApp() {
         show()
@@ -213,6 +226,40 @@ class StartScreenTest {
         show(pinned = listOf(camera))
         compose.onNodeWithTag("tile-1").performCustomAccessibilityActionWithLabel("chat with Alex")
         assertEquals(listOf(a), chats)
+    }
+
+    // The owner's call: a swipe on a large tile scrolls its list first, and start only once the list ends
+    @Test fun aSwipeOnALargeTileScrollsItsListBeforeStart() {
+        val scroll = ScrollState(0)
+        showLarge(messages = 4, more = 15, scroll = scroll)
+        compose.onNodeWithTag("tile-1").performTouchInput { swipe(center, center - Offset(0f, 140.dp.toPx())) }
+        compose.waitForIdle()
+        saysCamera("4 unread, P2: t2, P1: t1, P0: t0") // the list is at its end
+        assertTrue(scroll.value > 0) // and start took the rest
+    }
+
+    // Passes before the change too: in edit mode the list keeps out of the way, so a swipe on the tile scrolls start (§4.3).
+    @Test fun inEditModeASwipeOnALargeTileScrollsStartAndNotItsList() {
+        val scroll = ScrollState(0)
+        showLarge(messages = 4, more = 15, scroll = scroll)
+        compose.onNodeWithTag("tile-2").performTouchInput { longClick() }
+        compose.onNodeWithTag("tile-1").performTouchInput { swipe(center, center - Offset(0f, 140.dp.toPx())) }
+        compose.waitForIdle()
+        saysCamera("4 unread, P3: t3, P2: t2, P1: t1")
+        assertTrue(scroll.value > 0)
+    }
+
+    @OptIn(ExperimentalTestApi::class) // performCustomAccessibilityActionWithLabel
+    @Test fun aScrolledLargeTileOpensAndChatsWithTheRowUnderTheFinger() {
+        showLarge(messages = 7)
+        compose.onNodeWithTag("tile-1").performCustomAccessibilityActionWithLabel("older messages")
+        compose.waitForIdle()
+        // P3 is the top row in view now: its chat button at the row's end, and the rest of the row opens it.
+        compose.onNodeWithTag("tile-1").performTouchInput { click(Offset(width - 5f, 30f)) }
+        assertEquals(listOf("m3"), chats.map { it.key })
+        compose.onNodeWithTag("tile-1").performTouchInput { click(Offset(10f, 30f)) }
+        compose.waitUntil(5_000) { cameraSource.opened.isNotEmpty() }
+        assertEquals(listOf("m3"), cameraSource.opened.map { it?.key })
     }
 
     // §4.3 and §5.8; Review Focus 5

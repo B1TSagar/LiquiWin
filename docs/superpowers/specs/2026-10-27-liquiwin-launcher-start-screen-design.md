@@ -381,18 +381,20 @@ A single tile can still be overridden back to flat solid. Glass-only facets (tin
 - unread count at bottom right, shown as "99+" above 99
 - On a combined tile: up to four app icons, with per-app counts on wide and large tiles, plus the total.
 
-**Content faces.** One per item in the rotation (§5.3). Layout depends on size:
+**Content faces.** Medium and wide tiles have one for each of the rotation's 5 newest items (§5.3). A large tile has one, which lists them all. Layout depends on size:
 
 | Size | Content face |
 |---|---|
 | Small | None. Only the count changes. |
 | Medium | Avatar, sender, 2 lines of text |
 | Wide | Avatar, sender, 3 lines, or the item's photo with a caption |
-| Large | The three newest items stacked, each with its own tap area and chat button |
+| Large | All the items in a list, three rows in view at once, each row with its own tap area and chat button |
 
 On a combined tile, each content face also shows the item's app icon at top right.
 
-**Chat button.** Each item on a content face has a speech-bubble chat button at its bottom right, with a 48 dp touch area. It opens the item's chat window (§5.7), whether or not the app takes replies. On a large tile, each of the three rows has its own. (The owner's call after stage 2 part 1.)
+**Chat button.** Each item on a content face has a speech-bubble chat button at its bottom right, drawn at 24 WP px, with a 48 dp touch area. It opens the item's chat window (§5.7), whether or not the app takes replies. On a large tile, each row has its own. (The owner's calls after stage 2 part 1, and after the chat window's first build, whose 16 WP px button was hard to hit.)
+
+**A large tile's list** scrolls inside the tile. A swipe that starts on it scrolls the list first, and start only once the list has reached its end. While there are more than three items, a thin scrollbar beside the list shows which part is in view. Long-press still lifts the tile, and in edit mode a swipe scrolls start, not the list. TalkBack reads the rows in view, and the tile's **older messages** and **newer messages** actions move the list three rows at a time. A scrolled list holds its tile still (§5.4). (The owner's call after the chat window's first build, so that any message can be picked to reply to.)
 
 **Templates.** New tiles default to `FLIP`.
 
@@ -430,7 +432,7 @@ On a combined tile, each content face also shows the item's app icon at top righ
 
 ### 5.3 Rotation, unread and read
 
-- **Rotation.** A tile's rotation is its unread items, newest first, up to 5. With "keep read items for 24 h" on, read items follow the unread ones. If the rotation is empty, the tile shows its front face.
+- **Rotation.** A tile's rotation is its unread items, newest first. Medium and wide tiles turn through its 5 newest, and a large tile lists them all (§5.1). With "keep read items for 24 h" on, read items follow the unread ones. If the rotation is empty, the tile shows its front face.
 - **Hidden chats** (§5.8) are left out of the rotation and the unread count.
 - **Unread.** A MessagingStyle message counts as unread if it's newer than its conversation's `lastReadAt`. Any other notification counts as 1 while it's present and its `readAt` is empty.
 - **An item becomes read when:**
@@ -448,6 +450,7 @@ Tiles animate the way Windows Phone's did: a single timer for the whole start sc
 - **The timer.** The first tick comes 2.5 s after the start screen appears, then every 0.1–3 s at random, in 100 ms steps. Each tick moves one random tile on screen to its next face. Only tiles with a non-empty rotation (§5.3) and a moving template (not `ICONIC` or `STATIC`) take part. A tile that has just moved sits out the next 3 ticks, and if every such tile is sitting out, the tick does nothing.
 - **Tile pace** (part of the motion facet) scales the gaps between ticks: normal is the Windows Phone timing above, calm doubles the gaps and lively halves them.
 - **New items jump the queue.** A new item makes its tile flip to it within 1 s, even while another tile is moving, debounced to once per 600 ms per tile.
+- **A large tile's list** (§5.1). While it's scrolled away from its top, its tile sits out the ticks, so the row being looked for doesn't turn away. A new item scrolls it back to the top, unless it's being scrolled at that moment.
 - With motion off, a tile shows its newest item statically and there's no timer.
 
 ### 5.5 Taps
@@ -459,6 +462,8 @@ Tiles animate the way Windows Phone's did: a single timer for the whole start sc
 | Label strip, or anywhere on the front face | Open the app | Open the hub page |
 | Small tile | Open the app | Open the hub page |
 | Long-press | Edit mode | Edit mode |
+
+On a large tile, the content face body and the chat button are those of the row under the finger, wherever the list has scrolled to.
 
 "Open that item" tries each of these in turn:
 1. the notification's content intent
@@ -484,7 +489,7 @@ Every item opens its chat, not only items that take replies, and the window is w
 
 - **Opening.** An item's chat button opens it: on tile content faces (§5.1), hub rows and Action Center notifications. It shows that item's chat, meaning its `sourceId` and `conversationKey`.
 - **The window.** An overlay inside the launcher, anchored above the keyboard, in the style of Windows Phone Messaging. It opens with the swivel animation, and Back or a tap outside it closes it. It contains:
-  - a header with the avatar, name and app icon, and two text buttons: **open in app** and **hide this chat** (§5.8)
+  - a header with the avatar, name and app icon, and two text buttons: **open in app** and **hide this chat** (§5.8). The app icon is a button too, which TalkBack reads as "open in \<app\>" and which does what **open in app** does. (The owner's call after the chat window's first build.)
   - bubbles for the chat's stored messages, oldest at the top: incoming in the accent colour with a top-left tail, yours in a darker shade with a bottom-right tail. In a group, the sender's name sits above each incoming bubble. Each bubble has its time under it, and a photo shows inside its bubble. The window opens scrolled to the newest.
   - a scrollbar: whenever the bubbles are taller than their space, a thin bar along the right edge shows, by its length and position, which part is in view
   - when `canReply` is true, a text box that's already focused, with the keyboard showing, and a send button. Otherwise there's no text box, and the header's **open in app** is the way to reply. After a launcher restart, replying comes back once the app posts its notification again.

@@ -6,12 +6,16 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHeightIsEqualTo
+import androidx.compose.ui.test.assertWidthIsEqualTo
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.b1tsagar.liquiwin.core.design.theme.LiquiWinTheme
+import io.github.b1tsagar.liquiwin.core.design.theme.LocalWpUnits
+import io.github.b1tsagar.liquiwin.core.design.theme.WpUnits
 import io.github.b1tsagar.liquiwin.core.testing.testApp
 import io.github.b1tsagar.liquiwin.core.testing.testItem
 import io.github.b1tsagar.liquiwin.core.tiles.model.TileSize
@@ -69,5 +73,25 @@ class StartTileViewTest {
         size = TileSize.LARGE
         face = TileFace.Stack(listOf(testItem("a"), testItem("b"), testItem("c")))
         chatButtons().assertCountEquals(3)
+    }
+
+    // The owner found the 16 WP px button hard to hit. Its 48 dp target is the slot's.
+    @Test fun theChatButtonIs24WpPx() {
+        lateinit var units: WpUnits
+        compose.setContent {
+            LiquiWinTheme {
+                units = LocalWpUnits.current
+                StartTileView(tile(TileSize.MEDIUM), metrics, { null }, face = TileFace.Item(testItem("a")))
+            }
+        }
+        compose.onNodeWithTag("tile-chat", useUnmergedTree = true).assertWidthIsEqualTo(units.dp(24f)).assertHeightIsEqualTo(units.dp(24f))
+    }
+
+    @Test fun aLargeTilesListHasAScrollbarOnlyWithMoreThanThreeRows() {
+        var face: TileFace by mutableStateOf(TileFace.Stack(List(3) { testItem("m$it") }))
+        compose.setContent { LiquiWinTheme { StartTileView(tile(TileSize.LARGE), metrics, { null }, face = face) } }
+        compose.onNodeWithTag("tile-scrollbar", useUnmergedTree = true).assertDoesNotExist()
+        face = TileFace.Stack(List(4) { testItem("m$it") })
+        compose.onNodeWithTag("tile-scrollbar", useUnmergedTree = true).assertExists()
     }
 }
