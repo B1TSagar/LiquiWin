@@ -20,6 +20,7 @@ import androidx.core.graphics.applyCanvas
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.drawable.IconCompat
 import java.io.File
+import java.io.OutputStream
 
 /** Posts WhatsApp-like and Instagram-like notifications (spec §10). Keeps no state: each post starts from the one showing. */
 object Chats {
@@ -87,7 +88,13 @@ object Chats {
         Handler(Looper.getMainLooper()).postDelayed({ add(context, "alex", conversation, sent.setData("image/png", photo(context))) }, 2_000)
     }
 
-    /** What adb and the buttons post: [chat] is "alex", "family", "photo", "snap", "call", "picture" or "late"; the last five ignore [text]. */
+    /** A moving photo from Alex: a GIF, served as [postPicture]'s photo is, for the chat window to play (§5.7, §10). */
+    fun postMovingPicture(context: Context) {
+        val conversation = conversations.getValue("alex")
+        add(context, "alex", conversation, message("a moving photo", conversation.people.first()).setData("image/gif", movingPhoto(context)))
+    }
+
+    /** What adb and the buttons post: [chat] is "alex", "family", "photo", "snap", "call", "picture", "late" or "gif"; the last six ignore [text]. */
     internal fun post(context: Context, chat: String, text: String) {
         when (chat) {
             "alex", "family" -> receive(context, chat, text)
@@ -96,6 +103,7 @@ object Chats {
             "call" -> postCall(context)
             "picture" -> postPicture(context)
             "late" -> postLatePicture(context)
+            "gif" -> postMovingPicture(context)
         }
     }
 
@@ -152,9 +160,13 @@ object Chats {
         manager.notify(id, notification)
     }
 
-    private fun photo(context: Context): Uri {
-        val file = File(context.cacheDir, "photos/picture.png").apply { parentFile?.mkdirs() }
-        file.outputStream().use { picture(720, 480).compress(Bitmap.CompressFormat.PNG, 100, it) }
+    private fun photo(context: Context) = served(context, "picture.png") { picture(720, 480).compress(Bitmap.CompressFormat.PNG, 100, it) }
+    private fun movingPhoto(context: Context) = served(context, "moving.gif") { it.write(movingGif) }
+
+    // Writes cacheDir/photos/[name], which the notifier's own provider serves (photos.xml), and gives its URI.
+    private fun served(context: Context, name: String, write: (OutputStream) -> Unit): Uri {
+        val file = File(context.cacheDir, "photos/$name").apply { parentFile?.mkdirs() }
+        file.outputStream().use(write)
         // FileProvider's form: content://<authority>/<root name in photos.xml>/<file>. shortcut: built by hand, since
         // getUriForFile compares paths with '/' and so throws under Robolectric on Windows; use it once tests run elsewhere.
         return Uri.parse("content://${context.packageName}.photos/photos/${file.name}")
@@ -165,6 +177,15 @@ object Chats {
         drawColor(0xFFF09609.toInt())
         drawCircle(width / 2f, height / 2f, height / 3f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE })
     }
+
+    // A 1 × 1 GIF that turns orange to white and back every 0.5 s, for ever: the notifier's own copy, as it uses no LiquiWin module.
+    private val movingGif = (
+        "474946383961" + "01000100800000" + "F09609FFFFFF" + // the header, a 1 × 1 screen, and its two colours
+            "21FF0B4E45545343415045322E300301000000" + // loop for ever
+            "21F9040032000000" + "2C000000000100010000" + "0202440100" + // 0.5 s of orange
+            "21F9040032000000" + "2C000000000100010000" + "02024C0100" + // 0.5 s of white
+            "3B"
+        ).hexToByteArray()
 
     // A 128 px circle in the person's own colour, with their initial.
     private fun person(key: String, name: String, color: Int): Person {

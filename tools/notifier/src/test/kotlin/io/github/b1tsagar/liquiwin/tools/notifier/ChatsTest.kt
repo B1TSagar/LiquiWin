@@ -4,10 +4,14 @@ import android.app.Notification
 import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Context
+import android.graphics.ImageDecoder
+import android.graphics.drawable.AnimatedImageDrawable
 import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import java.io.File
+import java.nio.ByteBuffer
 import java.time.Duration
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -15,6 +19,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(AndroidJUnit4::class)
 class ChatsTest {
@@ -79,5 +84,16 @@ class ChatsTest {
         val photo = style(1).messages.single()
         assertEquals("a late photo", photo.text.toString())
         assertEquals("${context.packageName}.photos", photo.dataUri?.authority)
+    }
+
+    // Telling a moving picture from a still takes a real decoder, which Robolectric's legacy graphics lack.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test fun aMovingPhotoIsAGifThatMoves() {
+        Chats.postMovingPicture(context)
+        val photo = style(1).messages.single()
+        assertEquals("image/gif", photo.dataMimeType)
+        assertEquals("${context.packageName}.photos", photo.dataUri?.authority)
+        val gif = File(context.cacheDir, "photos/${photo.dataUri?.lastPathSegment}").readBytes()
+        assertTrue(ImageDecoder.decodeDrawable(ImageDecoder.createSource(ByteBuffer.wrap(gif))) is AnimatedImageDrawable)
     }
 }
