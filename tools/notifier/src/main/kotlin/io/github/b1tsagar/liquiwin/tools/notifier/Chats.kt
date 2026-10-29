@@ -9,6 +9,8 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Paint
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
 import androidx.core.app.RemoteInput
@@ -73,16 +75,19 @@ object Chats {
 
     /** A photo from Alex in the alex chat, served by the notifier's own provider and granted to no app (§10). */
     fun postPicture(context: Context) {
-        val file = File(context.cacheDir, "photos/picture.png").apply { parentFile?.mkdirs() }
-        file.outputStream().use { picture(720, 480).compress(Bitmap.CompressFormat.PNG, 100, it) }
-        // FileProvider's form: content://<authority>/<root name in photos.xml>/<file>. shortcut: built by hand, since
-        // getUriForFile compares paths with '/' and so throws under Robolectric on Windows; use it once tests run elsewhere.
-        val uri = Uri.parse("content://${context.packageName}.photos/photos/${file.name}")
         val conversation = conversations.getValue("alex")
-        add(context, "alex", conversation, message("a photo", conversation.people.first()).setData("image/png", uri))
+        add(context, "alex", conversation, message("a photo", conversation.people.first()).setData("image/png", photo(context)))
     }
 
-    /** What adb and the buttons post: [chat] is "alex", "family", "photo", "snap", "call" or "picture"; the last four ignore [text]. */
+    /** A photo as WhatsApp sends one: its message first, then the same message with the photo once it has downloaded, 2 s later. */
+    fun postLatePicture(context: Context) {
+        val conversation = conversations.getValue("alex")
+        val sent = message("a late photo", conversation.people.first())
+        add(context, "alex", conversation, sent)
+        Handler(Looper.getMainLooper()).postDelayed({ add(context, "alex", conversation, sent.setData("image/png", photo(context))) }, 2_000)
+    }
+
+    /** What adb and the buttons post: [chat] is "alex", "family", "photo", "snap", "call", "picture" or "late"; the last five ignore [text]. */
     internal fun post(context: Context, chat: String, text: String) {
         when (chat) {
             "alex", "family" -> receive(context, chat, text)
@@ -90,6 +95,7 @@ object Chats {
             "snap" -> postSnap(context)
             "call" -> postCall(context)
             "picture" -> postPicture(context)
+            "late" -> postLatePicture(context)
         }
     }
 
@@ -104,6 +110,7 @@ object Chats {
         val manager = context.getSystemService(NotificationManager::class.java)
         val showing = manager.activeNotifications.firstOrNull { it.id == ids.getValue(chat) }
         val old = showing?.let { NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(it.notification) }?.messages.orEmpty()
+            .filterNot { o -> new.any { it.timestamp == o.timestamp && "${it.text}" == "${o.text}" } } // a message posted again
         val group = conversation.people.size > 1
         val style = NotificationCompat.MessagingStyle(you).setGroupConversation(group).setConversationTitle(conversation.title.takeIf { group })
         (old + new).takeLast(5).forEach { style.addMessage(it) }
@@ -143,6 +150,14 @@ object Chats {
             .apply(build)
             .build()
         manager.notify(id, notification)
+    }
+
+    private fun photo(context: Context): Uri {
+        val file = File(context.cacheDir, "photos/picture.png").apply { parentFile?.mkdirs() }
+        file.outputStream().use { picture(720, 480).compress(Bitmap.CompressFormat.PNG, 100, it) }
+        // FileProvider's form: content://<authority>/<root name in photos.xml>/<file>. shortcut: built by hand, since
+        // getUriForFile compares paths with '/' and so throws under Robolectric on Windows; use it once tests run elsewhere.
+        return Uri.parse("content://${context.packageName}.photos/photos/${file.name}")
     }
 
     // Orange, with a white circle in the middle.

@@ -4,7 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 
-/** Posts from the shell: `--es chat` is alex, family, photo, snap, call or picture, and `--es text` the message, "hi" if left out. */
+/** Posts from the shell: `--es chat` is alex, family, photo, snap, call, picture or late, and `--es text` the message, "hi" if left out. */
 class PostReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         Chats.post(context, intent.getStringExtra(Chats.CHAT) ?: return, intent.getStringExtra("text") ?: "hi")

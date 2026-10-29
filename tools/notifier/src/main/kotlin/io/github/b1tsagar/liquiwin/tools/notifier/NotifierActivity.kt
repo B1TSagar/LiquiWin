@@ -21,7 +21,7 @@ class NotifierActivity : Activity() {
             Chats.cancel(this, chat)
             screen.addView(TextView(this).apply { text = "chat $chat"; textSize = 24f })
         }
-        for (chat in listOf("alex", "family", "photo", "snap", "call", "picture")) {
+        for (chat in listOf("alex", "family", "photo", "snap", "call", "picture", "late")) {
             screen.addView(Button(this).apply { text = chat; setOnClickListener { Chats.post(context, chat, "hi") } })
         }
         setContentView(screen)

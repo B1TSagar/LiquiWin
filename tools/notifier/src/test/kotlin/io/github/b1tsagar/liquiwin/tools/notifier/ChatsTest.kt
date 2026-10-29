@@ -4,14 +4,17 @@ import android.app.Notification
 import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Context
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import java.time.Duration
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Shadows.shadowOf
 
 @RunWith(AndroidJUnit4::class)
 class ChatsTest {
@@ -65,6 +68,16 @@ class ChatsTest {
         Chats.postPicture(context)
         val photo = style(1).messages.last()
         assertEquals("image/png", photo.dataMimeType)
+        assertEquals("${context.packageName}.photos", photo.dataUri?.authority)
+    }
+
+    // As WhatsApp sends one: the same message again, once the photo has downloaded
+    @Test fun aLatePhotoComesInALaterPostOfItsMessage() {
+        Chats.postLatePicture(context)
+        assertNull(style(1).messages.single().dataUri)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+        val photo = style(1).messages.single()
+        assertEquals("a late photo", photo.text.toString())
         assertEquals("${context.packageName}.photos", photo.dataUri?.authority)
     }
 }
