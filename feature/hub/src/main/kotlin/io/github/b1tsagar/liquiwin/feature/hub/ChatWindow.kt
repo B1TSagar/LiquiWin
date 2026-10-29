@@ -74,7 +74,9 @@ import io.github.b1tsagar.liquiwin.core.design.theme.LocalLiquiWinColors
 import io.github.b1tsagar.liquiwin.core.design.theme.LocalLiquiWinType
 import io.github.b1tsagar.liquiwin.core.design.theme.LocalWpUnits
 import io.github.b1tsagar.liquiwin.core.tiles.source.ImageRef
+import io.github.b1tsagar.liquiwin.core.tiles.source.TileItem
 import java.time.Instant
+import java.util.Locale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
@@ -158,7 +160,14 @@ fun ChatWindow(viewModel: ChatViewModel, catalog: AppCatalog, modifier: Modifier
                         }
                     }
                 }
-                Bubbles(shown, side, Modifier.weight(1f, fill = false))
+                Bubbles(shown, app?.label ?: "app", side, Modifier.weight(1f, fill = false), onPhoto = viewModel::openInApp)
+                // A missed call's buttons, but for its reply button, which the text box is (§5.7).
+                val calls = shown.chat.messages.lastOrNull()?.item?.buttons.orEmpty().withIndex().filterNot { it.value.isReply }
+                if (calls.isNotEmpty()) {
+                    Row(Modifier.padding(horizontal = side), horizontalArrangement = Arrangement.spacedBy(units.dp(24f))) {
+                        for ((i, button) in calls) TextButton(button.label.lowercase(Locale.getDefault())) { viewModel.press(i) }
+                    }
+                }
                 if (shown.failed) {
                     Row(Modifier.padding(horizontal = side), verticalAlignment = Alignment.CenterVertically) {
                         WpText("Couldn't send. Open ${app?.label ?: "the app"} to reply.", type.small, Modifier.weight(1f, fill = false))
@@ -173,7 +182,7 @@ fun ChatWindow(viewModel: ChatViewModel, catalog: AppCatalog, modifier: Modifier
 
 // Oldest at the top, then the replies on their way. It opens at the newest and stays there as messages arrive.
 @Composable
-private fun Bubbles(window: ChatWindowState, side: Dp, modifier: Modifier) {
+private fun Bubbles(window: ChatWindowState, app: String, side: Dp, modifier: Modifier, onPhoto: (TileItem) -> Unit) {
     val units = LocalWpUnits.current
     val context = LocalContext.current
     val format = remember(context) { DateFormat.getTimeFormat(context) }
@@ -189,6 +198,8 @@ private fun Bubbles(window: ChatWindowState, side: Dp, modifier: Modifier) {
                     message.item.text, message.item.image, mine = message.isSelf,
                     sender = message.sender.takeIf { window.chat.isGroup && !message.isSelf },
                     time = timeLabel(message.item.time, now, format),
+                    photoCard = "photo · open in $app".takeIf { message.item.photoUnreadable },
+                    onPhoto = { onPhoto(message.item) },
                 )
             }
             for (reply in window.pending) key(reply.id) {
@@ -200,9 +211,10 @@ private fun Bubbles(window: ChatWindowState, side: Dp, modifier: Modifier) {
 }
 
 // Incoming bubbles sit left in the accent colour with a top-left tail; yours sit right in a darker shade with a
-// bottom-right tail. TalkBack reads each, with its sender and time, as one item.
+// bottom-right tail. TalkBack reads each, with its sender and time, as one item. A photo LiquiWin couldn't read is a
+// [photoCard] in its place, a button of its own.
 @Composable
-private fun Bubble(text: String?, image: ImageRef?, mine: Boolean, sender: String?, time: String) {
+private fun Bubble(text: String?, image: ImageRef?, mine: Boolean, sender: String?, time: String, photoCard: String? = null, onPhoto: () -> Unit = {}) {
     val units = LocalWpUnits.current
     val colors = LocalLiquiWinColors.current
     val type = LocalLiquiWinType.current
@@ -220,6 +232,14 @@ private fun Bubble(text: String?, image: ImageRef?, mine: Boolean, sender: Strin
         Column(Modifier.background(fill)) {
             image?.let { ref ->
                 rememberImage(ref.file)?.let { Image(it, contentDescription = "photo", Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth) }
+            }
+            photoCard?.let {
+                Box(
+                    Modifier.heightIn(min = 48.dp).clickable(role = Role.Button, onClick = onPhoto).padding(horizontal = units.dp(12f)),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    WpText(it, type.body)
+                }
             }
             text?.let { WpText(it, type.body, Modifier.padding(horizontal = units.dp(12f), vertical = units.dp(8f))) }
         }

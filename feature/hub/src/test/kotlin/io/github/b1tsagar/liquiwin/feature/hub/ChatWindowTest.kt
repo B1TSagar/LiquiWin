@@ -14,6 +14,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -35,6 +36,7 @@ import io.github.b1tsagar.liquiwin.core.testing.testMessage
 import io.github.b1tsagar.liquiwin.core.tiles.model.SourceId
 import io.github.b1tsagar.liquiwin.core.tiles.source.Chat
 import io.github.b1tsagar.liquiwin.core.tiles.source.HiddenChat
+import io.github.b1tsagar.liquiwin.core.tiles.source.ItemButton
 import io.github.b1tsagar.liquiwin.core.tiles.source.ReplyResult
 import io.github.b1tsagar.liquiwin.core.tiles.source.SourceRegistry
 import io.github.b1tsagar.liquiwin.core.tiles.source.TileItem
@@ -178,5 +180,43 @@ class ChatWindowTest {
     @Test fun talkBackHearsTheWindowOpen() {
         open(testChat(a))
         compose.onNode(SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, "chat with Alex")).assertExists()
+    }
+
+    private fun TileItem.withButtons(vararg buttons: ItemButton) = copy(buttons = buttons.toList())
+
+    @Test fun aPhotoLiquiWinCouldntReadShowsACardThatOpensIt() {
+        val photo = testMessage("p", text = "look").let { it.copy(item = it.item.copy(photoUnreadable = true)) }
+        open(testChat(photo, a))
+        compose.onNodeWithText("photo · open in Chat").performClick()
+        assertEquals(listOf<TileItem?>(photo.item), source.opened)
+        assertNull(vm.window.value)
+    }
+
+    @Test fun aMissedCallsButtonsSitAboveTheBox() {
+        val call = testMessage("c", text = "missed call", at = 9).let {
+            it.copy(item = it.item.withButtons(ItemButton("Call back", false), ItemButton("Message", true)))
+        }
+        open(testChat(a, call))
+        compose.onNodeWithText("message").assertDoesNotExist() // the reply button is the box itself
+        compose.onNode(hasSetTextAction()).assertExists()
+        compose.onNodeWithText("call back").performClick()
+        assertEquals(listOf(call.item to 0), source.pressed)
+        assertNull(vm.window.value)
+    }
+
+    @Test fun aCallThatTakesNoReplyShowsItsButtonsInTheBoxsPlace() {
+        val call = testMessage("c", text = "missed call", at = 9, canReply = false).let {
+            it.copy(item = it.item.withButtons(ItemButton("Call back", false), ItemButton("Message", false)))
+        }
+        open(testChat(call))
+        compose.onNodeWithText("call back").assertExists()
+        compose.onNodeWithText("message").assertExists()
+        compose.onNode(hasSetTextAction()).assertDoesNotExist()
+    }
+
+    @Test fun anOlderCallsButtonsDontShow() {
+        val call = testMessage("c", text = "missed call", at = 0).let { it.copy(item = it.item.withButtons(ItemButton("Call back", false))) }
+        open(testChat(call, testMessage("b", text = "later", at = 9)))
+        compose.onNodeWithText("call back").assertDoesNotExist()
     }
 }

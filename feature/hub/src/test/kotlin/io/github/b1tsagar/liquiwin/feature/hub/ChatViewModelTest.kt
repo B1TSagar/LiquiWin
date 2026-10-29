@@ -173,6 +173,14 @@ class ChatViewModelTest {
         assertNull(vm.window.value)
     }
 
+    // Review Focus 3: a button gone since the row was drawn is its source's to settle, which opens the message instead
+    @Test fun aButtonThatHasGoneIsStillLeftToItsSource() {
+        open(a, b)
+        vm.press(0)
+        assertEquals(listOf(b.item to 0), source.pressed)
+        assertNull(vm.window.value)
+    }
+
     @Test fun hidingHidesTheChatUnderItsTitle() {
         open(a)
         vm.hide()

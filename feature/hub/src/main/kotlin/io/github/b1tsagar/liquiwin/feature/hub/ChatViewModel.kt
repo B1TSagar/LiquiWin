@@ -112,13 +112,25 @@ class ChatViewModel(private val sources: SourceRegistry, private val now: () -> 
         }
     }
 
-    /** Opens the newest message in its app, through §5.5's chain, which reads it, and closes. */
-    fun openInApp() {
+    /** Opens [item], or else the newest message, in its app, through §5.5's chain, which reads it, and closes. */
+    fun openInApp(item: TileItem? = null) {
+        val window = state.value ?: return
+        val source = sources.source(window.sourceId)
+        val opened = item ?: window.chat.messages.lastOrNull()?.item
+        close()
+        if (source != null && opened != null) viewModelScope.launch { source.open(opened) }
+    }
+
+    /**
+     * Presses the newest message's [button], a missed call's (§5.7), and closes. A button gone since the row was drawn is
+     * the source's to settle: it opens the message instead (§5.5).
+     */
+    fun press(button: Int) {
         val window = state.value ?: return
         val source = sources.source(window.sourceId)
         val newest = window.chat.messages.lastOrNull()?.item
         close()
-        if (source != null && newest != null) viewModelScope.launch { source.open(newest) }
+        if (source != null && newest != null) viewModelScope.launch { source.press(newest, button) }
     }
 
     /** Hides the chat from tiles (§5.8). The window stays until [close], so it can swivel out. */
