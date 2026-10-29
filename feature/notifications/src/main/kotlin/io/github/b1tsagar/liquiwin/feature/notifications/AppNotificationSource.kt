@@ -102,8 +102,9 @@ class AppNotificationSource(
     override suspend fun press(item: TileItem, button: Int) {
         markRead(listOf(item))
         val live = dao.item(item.key)?.takeIf { it.removedAt == null }?.let { actions.actions.value[it.notificationKey] }
-        // A reply action would go without text, so it opens the item instead, as a button that's gone or fails does.
-        val pending = live?.buttons?.getOrNull(button)?.takeIf { it !== live.reply }?.actionIntent
+        // A reply action, or any that takes text, would go without it, so it opens the item instead, as a button that's
+        // gone or fails does.
+        val pending = live?.buttons?.getOrNull(button)?.takeIf { it !== live.reply && it.remoteInputs.isNullOrEmpty() }?.actionIntent
         if (pending != null && launcher.send(pending)) return
         open(item)
     }

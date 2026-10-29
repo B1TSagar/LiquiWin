@@ -12,6 +12,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performCustomAccessibilityActionWithLabel
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
@@ -382,5 +383,22 @@ class LiveTilesTest {
         showLarge(messages = 7)
         page(1, "clear P5")
         assertEquals(listOf("m5"), chat.cleared.map { it.key })
+    }
+
+    // Final review: a swipe on another message takes over from one still clearing, which clears all the same. The fake
+    // source keeps a cleared message, so P5's let-go runs its whole course: out, a second's wait, and back.
+    @Test fun aSwipeOnAnotherMessageTakesOverFromOneStillClearing() {
+        showLarge(messages = 7) // P6, P5 and P4 in view, and 0.45 of the tile down is the middle row
+        page(1, "show new messages")
+        compose.onNodeWithTag("tile-1").performTouchInput {
+            swipe(Offset(centerX, height * 0.45f), Offset(centerX + width / 2, height * 0.45f), 300) // P5 slides out
+            down(Offset(centerX, height * 0.2f)) // P6, held a quarter of the tile to the left while P5 is still sliding
+            moveBy(Offset(-width / 8f, 0f), 50)
+            moveBy(Offset(-width / 8f, 0f), 50)
+        }
+        compose.mainClock.advanceTimeBy(2_000) // past the whole of P5's let-go
+        compose.onNodeWithText("reply", useUnmergedTree = true).assertExists()
+        assertEquals(listOf("m5"), chat.cleared.map { it.key })
+        compose.onNodeWithTag("tile-1").performTouchInput { up() }
     }
 }

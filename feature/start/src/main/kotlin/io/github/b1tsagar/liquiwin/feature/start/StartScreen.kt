@@ -515,9 +515,11 @@ private fun TileSlot(
     }
 
     // Letting go of a sideways swipe (§5.5): left opens the message's chat, and right clears it, sliding it out until it
-    // has left the tile, for at most 1 s. Then, or short of either, it slides back.
+    // has left the tile, for at most 1 s. Then, or short of either, it slides back. The next sideways swipe cuts its
+    // slides short, but never the clear.
+    val letting = remember { JobRef() }
     val letGo by rememberUpdatedState { message: TileItem, to: Sideways?, widthPx: Float ->
-        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+        letting.value = scope.launch(start = CoroutineStart.UNDISPATCHED) {
             suspend fun slide(x: Float) {
                 if (animationsOn) animate(swipe?.offsetPx ?: 0f, x, animationSpec = tween(200)) { at, _ -> swipe = MessageSwipe(message.key, at) }
                 swipe = MessageSwipe(message.key, x)
@@ -525,8 +527,7 @@ private fun TileSlot(
             when (to) {
                 Sideways.CHAT -> controller.chat(current, coords.value, editing, message)
                 Sideways.CLEAR -> {
-                    slide(widthPx)
-                    controller.clear(message)
+                    try { slide(widthPx) } finally { controller.clear(message) }
                     withTimeoutOrNull(1_000) { snapshotFlow { currentFaces }.first { faces -> faces.none { f -> f.shownItems.any { it.key == message.key } } } }
                 }
                 null -> Unit
@@ -640,6 +641,7 @@ private fun TileSlot(
                                 // The message follows the finger, only leftward on a history page, and acts as it lets go.
                                 val canClear = page != TilePage.HISTORY
                                 var drag = moved.x
+                                letting.value?.cancel() // this message's slide is the one drawn now
                                 while (true) {
                                     swipe = MessageSwipe(message.key, if (canClear) drag else drag.coerceAtMost(0f))
                                     val change = awaitPointerEvent(PointerEventPass.Main).changes.firstOrNull { it.id == down.id }

@@ -290,6 +290,17 @@ class AppNotificationSourceTest {
         assertEquals(emptyList<Pair<Notification.Action, String>>(), launcher.replies)
     }
 
+    // Final review: any button that takes text, not only the one the text box sends, such as a quick response's choices
+    @Test fun aButtonThatTakesTextIsNeverSentWithoutIt() = runTest {
+        dao.replaceNotification("n1", listOf(stored("c", 100)))
+        val choices = RemoteInput.Builder("quick").setChoices(arrayOf("Can't talk now")).setAllowFreeFormInput(false).build()
+        val quick = Notification.Action.Builder(null, "Quick response", PendingIntent.getBroadcast(context, 1, Intent("quick"), PendingIntent.FLAG_MUTABLE))
+            .addRemoteInput(choices).build()
+        actions.put("n1", LiveActions(intent, null, listOf(button("Call back"), quick)))
+        source.press(source.items.first().single(), 1)
+        assertEquals(listOf(intent), launcher.sent) // opened through its content intent instead
+    }
+
     @Test fun anItemSaysWhenItsPhotoCouldntBeRead() = runTest {
         dao.replaceNotification("n1", listOf(stored("p", 100, photoUnreadable = true)))
         assertTrue(source.items.first().single().photoUnreadable)
