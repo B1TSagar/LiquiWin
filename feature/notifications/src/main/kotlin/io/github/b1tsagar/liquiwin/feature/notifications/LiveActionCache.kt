@@ -7,7 +7,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-data class LiveActions(val contentIntent: PendingIntent?, val reply: Notification.Action?)
+/** [buttons] are a missed call's (§5.1); a reply button among them is [reply] itself. */
+data class LiveActions(val contentIntent: PendingIntent?, val reply: Notification.Action?, val buttons: List<Notification.Action> = emptyList())
 
 /** The actions of the notifications showing now, by notification key. Memory only: a PendingIntent can't be stored. */
 class LiveActionCache {

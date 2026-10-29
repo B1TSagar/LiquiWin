@@ -12,6 +12,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -52,6 +53,20 @@ class NormaliserTest {
         assertEquals("Reply", normalise("com.whatsapp", whatsAppChat())!!.replyAction?.title) // never "Mark as read", listed first
         assertEquals("Reply", normalise("com.facebook.orca", messengerChat())!!.replyAction?.title)
         assertNull(normalise("com.google.android.gm", gmailEmail())!!.replyAction) // its Reply takes no text
+    }
+
+    @Test fun aMissedCallKeepsItsFirstTwoButtonsInTheAppsOrder() {
+        val call = normalise("com.samsung.android.dialer", missedCall(listOf("Call back", "Message", "Block")))!!
+        assertEquals(listOf("Call back", "Message"), call.buttons.map { it.title.toString() })
+    }
+
+    @Test fun aMissedCallsReplyButtonIsItsReplyAction() {
+        val call = normalise("com.google.android.dialer", missedCall(listOf("Call back"), replyLabel = "Reply"))!!
+        assertSame(call.replyAction, call.buttons[1])
+    }
+
+    @Test fun otherNotificationsHaveNoButtons() {
+        assertEquals(emptyList<Notification.Action>(), normalise("com.whatsapp", whatsAppChat())!!.buttons)
     }
 
     @Test fun anEmailIsOnePlainItemWithItsBigText() {

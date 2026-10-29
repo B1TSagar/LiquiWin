@@ -12,6 +12,8 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -43,6 +45,27 @@ class NotificationIntakeTest {
         assertEquals(listOf("see you at 6", "are you coming?"), stored.map { it.item.text })
         assertTrue(stored.all { it.unread && it.item.avatarFile != null })
         assertEquals("Reply", actions.actions.value.getValue(chat.key).reply?.title)
+    }
+
+    @Test fun aMissedCallsButtonsAreKeptWithItsLiveActions() = runTest {
+        val call = sbn("com.samsung.android.dialer", missedCall())
+        intake().posted(call)
+        items("app:com.samsung.android.dialer@0") { it.size == 1 }
+        assertEquals(listOf("Call back", "Message"), actions.actions.value.getValue(call.key).buttons.map { it.title.toString() })
+    }
+
+    @Test fun aPhotoLiquiWinCantReadIsStoredAsOne() = runTest {
+        intake().posted(sbn("org.telegram.messenger", telegramPhoto())) // nothing grants LiquiWin its provider
+        val stored = items("app:org.telegram.messenger@0") { it.size == 1 }.single().item
+        assertTrue(stored.photoUnreadable)
+        assertNull(stored.imageFile)
+    }
+
+    @Test fun aPhotoLiquiWinCanReadIsStoredAsAnImage() = runTest {
+        intake().posted(sbn("com.instagram.android", instagramLike()))
+        val stored = items("app:com.instagram.android@0") { it.size == 1 }.single().item
+        assertFalse(stored.photoUnreadable)
+        assertNotNull(stored.imageFile)
     }
 
     // Review Focus 3

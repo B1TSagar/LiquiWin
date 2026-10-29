@@ -71,10 +71,11 @@ class NotificationIntake(
         val items = normalised.items.filter { it.postedAt in time - RETENTION_MS..time + CLOCK_SLACK_MS }.distinctBy { it.key }
         if (items.isEmpty()) return
         // Before the items, so a stored item never shows without its actions.
-        actions.put(normalised.notificationKey, LiveActions(normalised.contentIntent, normalised.replyAction))
+        actions.put(normalised.notificationKey, LiveActions(normalised.contentIntent, normalised.replyAction, normalised.buttons))
         val stored = dao.existingKeys(items.map { it.key }).toSet()
         val entities = items.map { item ->
             val isNew = item.key !in stored // a stored item keeps the images it has
+            val imageFile = if (isNew) item.image?.let { images.save(it, ImageStore.IMAGE_PX) } else null
             NotificationItemEntity(
                 key = item.key,
                 notificationKey = normalised.notificationKey,
@@ -85,10 +86,12 @@ class NotificationIntake(
                 sender = item.sender,
                 text = item.text,
                 avatarFile = if (isNew) item.avatar?.let { images.save(it, ImageStore.AVATAR_PX) } else null,
-                imageFile = if (isNew) item.image?.let { images.save(it, ImageStore.IMAGE_PX) } else null,
+                imageFile = imageFile,
                 postedAt = item.postedAt,
                 removedAt = null,
                 isSelf = item.isSelf,
+                // Most chat apps let only Android's own panel read a photo, so the chat window shows a card (§5.7).
+                photoUnreadable = isNew && item.image != null && imageFile == null,
             )
         }
         images.delete(dao.replaceNotification(normalised.notificationKey, entities))

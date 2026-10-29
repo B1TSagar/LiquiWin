@@ -69,7 +69,7 @@ internal fun whatsAppSummary(): Notification =
 internal fun gmailSummary(): Notification =
     builder().setContentTitle("Gmail").setContentText("3 new emails").setGroup("gmail").setGroupSummary(true).build()
 
-internal fun instagramLike(): Notification = builder().setContentTitle("Instagram").setContentText("sam_k liked your photo")
+internal fun instagramLike(): Notification = builder().setContentTitle("Instagram").setContentText("sam_k liked your photo").setWhen(3_000)
     .setStyle(NotificationCompat.BigPictureStyle().bigPicture(Bitmap.createBitmap(2000, 1000, Bitmap.Config.ARGB_8888)))
     .build()
 
@@ -86,6 +86,13 @@ internal fun telegramPhoto(): Notification = builder()
             MessagingStyle.Message("photo", 1_000, alex).setData("image/jpeg", Uri.parse("content://org.telegram.messenger.provider/media/1")),
         ),
     )
+    .build()
+
+/** A dialer's missed call from Alex, with [labels] as its buttons, then [replyLabel]'s button that takes a reply. */
+internal fun missedCall(labels: List<String> = listOf("Call back", "Message"), replyLabel: String? = null): Notification = builder()
+    .setContentTitle("Alex").setContentText("Missed call").setCategory(NotificationCompat.CATEGORY_MISSED_CALL).setWhen(3_000)
+    .apply { for (label in labels) addAction(action(label)) }
+    .apply { if (replyLabel != null) addAction(action(replyLabel, Action.SEMANTIC_ACTION_REPLY, RemoteInput.Builder("reply").build())) }
     .build()
 
 internal fun gmailEmail(): Notification = builder().setContentTitle("Pat Lee").setContentText("Lunch?").setWhen(4_000)

@@ -35,6 +35,7 @@ data class Normalised(
     val items: List<NormalisedItem>, // never empty
     val contentIntent: PendingIntent?,
     val replyAction: Notification.Action?,
+    val buttons: List<Notification.Action> = emptyList(), // a missed call's, up to two, in the app's order (§5.1)
 )
 
 /** Turns another app's notification into the items its tile shows (§5.2). */
@@ -46,7 +47,7 @@ class Normaliser(private val context: Context, private val serialOf: (UserHandle
         val sourceId = SourceId.forApp(sbn.packageName, serialOf(sbn.user))
         val shortcutId = NotificationCompat.getShortcutId(notification)
         val items = messages(sbn, sourceId, shortcutId) ?: plain(sbn, sourceId, shortcutId) ?: return null
-        return Normalised(sbn.key, sourceId, items, notification.contentIntent, replyAction(notification))
+        return Normalised(sbn.key, sourceId, items, notification.contentIntent, replyAction(notification), buttons(notification))
     }
 
     private fun messages(sbn: StatusBarNotification, sourceId: SourceId, shortcutId: String?): List<NormalisedItem>? {
@@ -108,6 +109,7 @@ class Normaliser(private val context: Context, private val serialOf: (UserHandle
 private const val SENDER_MAX = 200
 private const val TEXT_MAX = 2_000
 private const val PROGRESS_TEMPLATE = "android.app.Notification\$ProgressStyle"
+private const val CATEGORY_MISSED_CALL = "missed_call" // Notification.CATEGORY_MISSED_CALL is API 30
 private val MEDIA_TEMPLATES = setOf("android.app.Notification\$MediaStyle", "android.app.Notification\$DecoratedMediaCustomViewStyle")
 
 // The ignore list is stage 6's.
@@ -142,11 +144,18 @@ private fun isUser(person: Person, user: Person): Boolean {
     return name != null && name == user.name?.toString()
 }
 
-// The only action kept. LiquiWin never sends an app's mark-as-read, which would send a read receipt (§5.3).
+// The only action kept beside a missed call's buttons. LiquiWin never sends an app's mark-as-read, which would send a
+// read receipt (§5.3).
 private fun replyAction(notification: Notification): Notification.Action? {
     val actions = notification.actions ?: return null
     return actions.firstOrNull { it.semanticAction == Notification.Action.SEMANTIC_ACTION_REPLY && !it.remoteInputs.isNullOrEmpty() }
         ?: actions.firstOrNull { action -> action.remoteInputs?.any { it.allowFreeFormInput } == true }
+}
+
+// A missed call's own buttons, such as Call back and Message, which do what they do in Android's panel (§5.1).
+private fun buttons(notification: Notification): List<Notification.Action> {
+    if (notification.category != CATEGORY_MISSED_CALL) return emptyList()
+    return notification.actions.orEmpty().filter { !it.title.isNullOrBlank() && it.actionIntent != null }.take(2)
 }
 
 private fun CharSequence.cut(max: Int): String = toString().take(max) // plain text, without spans
