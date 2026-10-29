@@ -16,7 +16,6 @@ import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -55,8 +54,13 @@ import androidx.compose.ui.geometry.toRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToUp
+import androidx.compose.ui.input.pointer.isOutOfBounds
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInWindow
@@ -100,19 +104,27 @@ import io.github.b1tsagar.liquiwin.core.tiles.model.TileSize
 import io.github.b1tsagar.liquiwin.core.tiles.source.TileItem
 import io.github.b1tsagar.liquiwin.core.tiles.source.TileState
 import io.github.b1tsagar.liquiwin.feature.start.layout.Cell
+import io.github.b1tsagar.liquiwin.feature.start.live.FLING_DP_PER_S
 import io.github.b1tsagar.liquiwin.feature.start.live.LABEL_STRIP_WP_PX
 import io.github.b1tsagar.liquiwin.feature.start.live.STACK_SIZE
 import io.github.b1tsagar.liquiwin.feature.start.live.StackLayout
 import io.github.b1tsagar.liquiwin.feature.start.live.StackRow
 import io.github.b1tsagar.liquiwin.feature.start.live.TileFace
 import io.github.b1tsagar.liquiwin.feature.start.live.TileFlipState
+import io.github.b1tsagar.liquiwin.feature.start.live.TilePage
 import io.github.b1tsagar.liquiwin.feature.start.live.TileTicker
 import io.github.b1tsagar.liquiwin.feature.start.live.faces
 import io.github.b1tsagar.liquiwin.feature.start.live.nextFace
+import io.github.b1tsagar.liquiwin.feature.start.live.pageFaces
+import io.github.b1tsagar.liquiwin.feature.start.live.pageFor
+import io.github.b1tsagar.liquiwin.feature.start.live.settle
 import io.github.b1tsagar.liquiwin.feature.start.live.tileChatTarget
 import io.github.b1tsagar.liquiwin.feature.start.live.tileTapTarget
+import io.github.b1tsagar.liquiwin.feature.start.live.turnsDown
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.random.Random
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.conflate
@@ -120,6 +132,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -134,7 +147,8 @@ private const val EMPTY_HINT = "swipe left for your apps. long-press one and cho
  * Each tile shows its unread count, or a pause mark while [liveTilesPaused]. While start is shown, on screen and resumed,
  * outside edit mode and with animations on, the tiles on screen flip through their items one at a time, and a new item
  * flips its tile straight away. With animations off each tile shows the face after its front. Each item showing has a
- * chat button, which hands the item to [onChat] (§5.5). In edit mode a tile with hidden chats lists them from its
+ * chat button, which hands the item to [onChat] (§5.5). While start is scrolled all the way up, a swipe down turns a tile
+ * between its front and its new messages or history (§5.3). In edit mode a tile with hidden chats lists them from its
  * bottom-left corner, each with show again (§5.8).
  */
 @Composable
@@ -165,6 +179,7 @@ fun StartScreen(
     SideEffect {
         controller.update(haptic, sidePx, stepPx, state.gridWidth)
         controller.onChat = onChat
+        controller.startAtTop = { scrollState.value == 0 }
     }
 
     // One clock turns every tile. Going away they turnstile out, a tapped tile last, and its app opens once the others
@@ -361,22 +376,33 @@ private fun TileSlot(
     val scale by animateFloatAsState(if (edit == null) 1f else if (selected) 1.04f else 0.92f, label = "tile scale")
     val dim by animateFloatAsState(if (edit != null && !selected) 0.4f else 1f, label = "tile dim")
     val current by rememberUpdatedState(tile)
+    val currentLive by rememberUpdatedState(live)
     val editing by rememberUpdatedState(edit != null)
     val selectedNow by rememberUpdatedState(selected)
     val coords = remember { CoordinatesRef() }
 
-    // The face showing: the front while paused, the face after the front with animations off, otherwise the live face.
-    val tileFaces = faces(tile.size, live?.rotation.orEmpty())
+    // A swipe down turns the tile between its front and a page (§5.3, §5.5). With animations off, atFront shows the
+    // front where the face after it would show. A tile with a finger on it holds still (§5.4).
+    var page by remember { mutableStateOf<TilePage?>(null) }
+    var atFront by remember { mutableStateOf(false) }
+    var touched by remember { mutableStateOf(false) }
+    val swipes = edit == null && !liveTilesPaused && !tile.isPaused
+    val swipesNow by rememberUpdatedState(swipes)
+
+    // The face showing: the front while paused; with animations off the front once swiped to, else a page's first face
+    // or the face after the front; otherwise the live face.
+    val tileFaces = pageFaces(tile.size, live, page)
     val liveFace = remember { TileFlipState(TileFace.Front.key) }
     val still = liveTilesPaused || !animationsOn
     val face = when {
         liveTilesPaused -> TileFace.Front
-        !animationsOn -> tileFaces.getOrElse(1) { TileFace.Front }
-        else -> tileFaces.firstOrNull { it.key == liveFace.face } ?: TileFace.Front
+        !animationsOn -> if (atFront) TileFace.Front else if (page != null) tileFaces.first() else tileFaces.getOrElse(1) { TileFace.Front }
+        else -> tileFaces.firstOrNull { it.key == liveFace.face } ?: tileFaces.first()
     }
-    // A flip draws the old face until it's edge-on at 90°.
+    // A flip draws the old face until it's edge-on at 90°. A new messages page's faces are among the front's.
     val firstHalf by remember { derivedStateOf { liveFace.from != null && liveFace.angle < 90f } }
-    val drawn = if (!still && firstHalf) tileFaces.firstOrNull { it.key == liveFace.from } ?: TileFace.Front else face
+    val history = pageFaces(tile.size, live, TilePage.HISTORY)
+    val drawn = if (!still && firstHalf) (faces(tile.size, live?.rotation.orEmpty()) + history).firstOrNull { it.key == liveFace.from } ?: TileFace.Front else face
     // A large tile's list keeps its place while the tile turns. Its rows start below the tile's top inset (§5.1).
     val stack = rememberLazyListState()
     val insetPx = with(LocalDensity.current) { LocalWpUnits.current.dp(TILE_INSET_WP_PX).toPx() }
@@ -410,29 +436,69 @@ private fun TileSlot(
         }.takeIf { stack.canScrollBackward },
     )
     val lines = shown.map { listOfNotNull(it.title, it.text).joinToString(": ") }
-    val said = if (liveTilesPaused) "live tile paused" else (listOfNotNull("$unread unread".takeIf { unread > 0 }) + lines).joinToString(", ").ifEmpty { null }
+    val said = if (liveTilesPaused) "live tile paused" else {
+        (listOfNotNull("history".takeIf { page == TilePage.HISTORY }, "$unread unread".takeIf { unread > 0 }) + lines).joinToString(", ").ifEmpty { null }
+    }
 
-    // The timer reaches the tile through the controller. A face that has gone, such as a read item's, gives way to the
-    // front without a flip.
+    // From the front to its page, or from a page or a content face back to the front (§5.5). The page and the turn
+    // change in one step, so the gone-face snap finds the face already turning.
+    val turnDown by rememberUpdatedState {
+        val to = if (page == null && face == TileFace.Front) pageFor(tile.size, live) else null
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            page = to
+            if (animationsOn) launch(start = CoroutineStart.UNDISPATCHED) { liveFace.flipTo(pageFaces(tile.size, live, to).first().key) }
+            else atFront = to == null
+            controller.ticker.jumped(tile.id, withFrameMillis { it }) // a turn counts as a move (§5.4)
+        }
+    }
+    // TalkBack can't swipe, so the swipe down is an action too, whenever swipes are allowed (§5.5).
+    val turnAction = when {
+        !swipes -> null
+        face != TileFace.Front || page != null -> "show front"
+        else -> when (pageFor(tile.size, live)) {
+            TilePage.NEW -> "show new messages"
+            TilePage.HISTORY -> "show history"
+            null -> null
+        }
+    }?.let { CustomAccessibilityAction(it) { turnDown(); true } }
+
+    // The timer reaches the tile through the controller. A face that has gone, such as a read item's, gives way without
+    // a flip: a page's to the page's first, and the front's to the front.
     val currentFaces by rememberUpdatedState(tileFaces)
     val listScrolled by rememberUpdatedState(face is TileFace.Stack && stack.canScrollBackward)
     DisposableEffect(tile.id) {
-        controller.liveSlots[tile.id] = LiveSlot(liveFace, coords, held = { listScrolled }) { currentFaces }
+        controller.liveSlots[tile.id] = LiveSlot(liveFace, coords, held = { listScrolled || touched }) { currentFaces }
         onDispose { controller.liveSlots.remove(tile.id) }
     }
-    LaunchedEffect(tileFaces) { if (tileFaces.none { it.key == liveFace.face }) liveFace.snapTo(TileFace.Front.key) }
+    LaunchedEffect(tileFaces) { if (tileFaces.none { it.key == liveFace.face }) liveFace.snapTo(tileFaces.first().key) }
 
-    // A new item flips its tile to it straight away, if the tile is on screen while tiles move. Jumps on one tile wait
-    // for the ticker's debounce, and newer items replace any still waiting.
-    val currentLive by rememberUpdatedState(live)
+    // A page changes under its items once no finger is on the tile (§5.3). History turning to new messages flips to the
+    // new item while tiles move, rather than snapping to it.
+    val movingNow by rememberUpdatedState(moving)
+    val settled = settle(page, tile.size, live)
+    LaunchedEffect(settled) {
+        if (settled == page) return@LaunchedEffect
+        snapshotFlow { touched }.first { !it }
+        val from = page
+        page = settle(from, current.size, currentLive) // afresh: the lift may have turned the tile meanwhile
+        if (from == TilePage.HISTORY && page == TilePage.NEW && movingNow && controller.isShowing(coords.value)) {
+            liveFace.flipTo(pageFaces(current.size, currentLive, page).first().key)
+        }
+    }
+
+    // A new item flips its tile to it straight away, if the tile is on screen while tiles move, once no finger is on it.
+    // Jumps on one tile wait for the ticker's debounce, and newer items replace any still waiting. With animations off,
+    // a new item shows even after a swipe to the front, as it would flip in.
     val seen = remember { SeenRef() }
     LaunchedEffect(moving) {
         snapshotFlow { currentLive }.filterNotNull()
             .mapNotNull(seen::newest)
+            .onEach { atFront = false }
             .filter { moving && controller.isShowing(coords.value) }
             .conflate()
             .collect { item ->
                 delay(controller.ticker.jumpDelayMs(tile.id, withFrameMillis { it }))
+                snapshotFlow { touched }.first { !it }
                 val to = currentFaces.firstOrNull { f -> f.shownItems.any { it.key == item.key } }
                 if (to is TileFace.Stack && !stack.isScrollInProgress) stack.scrollToItem(0) // the new item is the list's top row
                 if (to == null || to.key == liveFace.face) return@collect
@@ -463,8 +529,8 @@ private fun TileSlot(
                 onClick { controller.tap(current, coords.value, editing, shown.firstOrNull()); true }
                 onLongClick { controller.longPress(current); true }
                 // A content face's tap opens its first item in view, so the app and a list's other rows get actions of their own.
-                if (face != TileFace.Front) {
-                    customActions = listOf(CustomAccessibilityAction("open ${tile.label}") { controller.tap(current, coords.value, editing); true }) +
+                val actions = if (face == TileFace.Front) emptyList() else {
+                    listOf(CustomAccessibilityAction("open ${tile.label}") { controller.tap(current, coords.value, editing); true }) +
                         shown.drop(1).map { item ->
                             CustomAccessibilityAction("open ${item.title}") { controller.tap(current, coords.value, editing, item); true }
                         } +
@@ -472,7 +538,8 @@ private fun TileSlot(
                             CustomAccessibilityAction("chat with ${item.title}") { controller.chat(current, coords.value, editing, item); true }
                         } +
                         pages
-                }
+                } + listOfNotNull(turnAction)
+                if (actions.isNotEmpty()) customActions = actions
             }
             .onPlaced { coords.value = it }
             .pointerInput(tile.id) {
@@ -480,17 +547,56 @@ private fun TileSlot(
                     val down = awaitFirstDown(requireUnconsumed = false)
                     // Only the lifted tile moves at a touch; any other needs a long-press, so a swipe on it scrolls.
                     if (!editing || !selectedNow) {
-                        var cancelled = false
-                        val up = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
-                            waitForUpOrCancellation().also { if (it == null) cancelled = true }
-                        }
-                        if (cancelled) return@awaitEachGesture
-                        if (up != null) {
-                            up.consume()
-                            val chat = chatTarget(up.position.x, up.position.y, size.width.toFloat(), size.height.toFloat())
-                            if (chat != null) controller.chat(current, coords.value, editing, chat)
-                            else controller.tap(current, coords.value, editing, tapTarget(up.position.y, size.height.toFloat()))
-                            return@awaitEachGesture
+                        touched = true
+                        try {
+                            // A large tile's list scrolls back to its top before a swipe down turns the tile (§5.5).
+                            val turns = swipesNow && controller.startAtTop() && pageFor(current.size, currentLive) != null && !listScrolled
+                            val velocity = VelocityTracker().apply { addPointerInputChange(down) }
+                            var moved = Offset.Zero
+                            var claimed = false
+                            var cancelled = false
+                            val up = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                                while (true) {
+                                    // Initial: this tile sees the event before a large tile's list, so the list never starts a swipe down it takes.
+                                    val early = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id }
+                                    if (early == null) { cancelled = true; break }
+                                    velocity.addPointerInputChange(early)
+                                    moved += early.position - early.previousPosition
+                                    if (turns && early.pressed && moved.y >= viewConfiguration.touchSlop && moved.y > abs(moved.x)) { // >=, as start's scroll
+                                        early.consume()
+                                        claimed = true
+                                        break
+                                    }
+                                    // Main and Final: as waitForUpOrCancellation. A child button, start's scroll or the pager may have it.
+                                    val change = awaitPointerEvent(PointerEventPass.Main).changes.first { it.id == down.id }
+                                    if (change.isConsumed || change.isOutOfBounds(size, extendedTouchPadding)) { cancelled = true; break }
+                                    if (change.changedToUp()) return@withTimeoutOrNull change
+                                    if (awaitPointerEvent(PointerEventPass.Final).changes.first { it.id == down.id }.isConsumed) { cancelled = true; break }
+                                }
+                                null
+                            }
+                            if (cancelled) return@awaitEachGesture
+                            if (claimed) {
+                                // The tile holds still under the finger, and turns as it lets go: past a third of its height, or with a flick.
+                                while (true) {
+                                    val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
+                                    change.consume()
+                                    velocity.addPointerInputChange(change)
+                                    if (change.pressed) continue
+                                    val flingPx = FLING_DP_PER_S.dp.toPx()
+                                    if (turnsDown(change.position.y - down.position.y, velocity.calculateVelocity().y, size.height.toFloat(), flingPx)) turnDown()
+                                    return@awaitEachGesture
+                                }
+                            }
+                            if (up != null) {
+                                up.consume()
+                                val chat = chatTarget(up.position.x, up.position.y, size.width.toFloat(), size.height.toFloat())
+                                if (chat != null) controller.chat(current, coords.value, editing, chat)
+                                else controller.tap(current, coords.value, editing, tapTarget(up.position.y, size.height.toFloat()))
+                                return@awaitEachGesture
+                            }
+                        } finally {
+                            touched = false
                         }
                         controller.longPress(current)
                         controller.startDrag(current, position.value)
@@ -520,6 +626,8 @@ private fun TileSlot(
         StartTileView(
             tile, metrics, icon, Modifier.clearAndSetSemantics {}.tilt(enabled = edit == null),
             face = drawn, unread = unread, liveTilesPaused = liveTilesPaused, stack = stack, scrollable = edit == null,
+            // While a history face is drawn, through a flip's first half too.
+            label = if (drawn != TileFace.Front && drawn in history) "history" else tile.label,
         )
         if (selected && controller.drag == null) {
             EditControls(
@@ -588,8 +696,8 @@ private class StartController(private val viewModel: StartViewModel) {
     }
 
     /**
-     * One turn of the timer: a tile on screen with more than its front flips to its next face, and the turn ends with it.
-     * A tile whose list is scrolled from its top stays as it is.
+     * One turn of the timer: a tile on screen with more than one face flips to its next face, and the turn ends with it.
+     * A tile whose list is scrolled from its top, or with a finger on it, stays as it is.
      */
     suspend fun tickLive() {
         val candidates = liveSlots.filterValues { it.faces().size > 1 && !it.held() && isShowing(it.coords.value) }
@@ -600,6 +708,7 @@ private class StartController(private val viewModel: StartViewModel) {
     /** Opens a tile's app, or the item given, from its bounds in the window, however the screen wants to. */
     var launch: (Long, Rect?, TileItem?) -> Unit = { id, bounds, item -> viewModel.open(id, bounds, null, item) }
     var onChat: (TileItem) -> Unit = {}
+    var startAtTop: () -> Boolean = { true } // whether start is scrolled all the way up; StartScreen sets it
     private var haptic: HapticFeedback? = null
     private var sidePx = 0f
     private var stepPx = 1f

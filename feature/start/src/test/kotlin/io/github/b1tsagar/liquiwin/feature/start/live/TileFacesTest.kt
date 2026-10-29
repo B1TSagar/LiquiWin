@@ -34,4 +34,9 @@ class TileFacesTest {
         assertEquals(listOf("c", "b", "front"), listOf("front", "c", "b").map { nextFace(faces, it).key })
         assertEquals("front", nextFace(faces, "read-meanwhile").key)
     }
+
+    @Test fun aGoneFaceGivesWayToThePagesFirst() {
+        val page = items.take(2).map { TileFace.Item(it) }
+        assertEquals(page.first(), nextFace(page, current = "gone"))
+    }
 }

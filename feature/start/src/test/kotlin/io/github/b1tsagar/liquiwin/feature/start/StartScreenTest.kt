@@ -23,6 +23,7 @@ import androidx.compose.ui.test.performCustomAccessibilityActionWithLabel
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
+import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.b1tsagar.liquiwin.core.data.apps.AppKey
@@ -194,6 +195,16 @@ class StartScreenTest {
         compose.onNodeWithTag("tile-1").performCustomAccessibilityActionWithLabel("open Camera")
         compose.waitUntil(5_000) { catalog.launched.isNotEmpty() }
         assertEquals(listOf(camera.key), catalog.launched)
+    }
+
+    // Review Focus 1: a guard, passing today, that must still pass
+    @Test fun inEditModeASwipeDownTurnsNoTile() {
+        Settings.Global.putFloat(compose.activity.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
+        cameraSource.itemState.value = listOf(testItem("a", source = cameraSource.id))
+        show()
+        compose.onNodeWithTag("tile-2").performTouchInput { longClick() }
+        compose.onNodeWithTag("tile-1").performTouchInput { swipeDown() }
+        saysCamera("1 unread, Alex: see you at 6")
     }
 
     // §5.5: a chat button opens the item's chat, not the item

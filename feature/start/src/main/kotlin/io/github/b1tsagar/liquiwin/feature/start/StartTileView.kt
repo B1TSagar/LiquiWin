@@ -65,6 +65,7 @@ internal fun StartTileView(
     liveTilesPaused: Boolean = false,
     stack: LazyListState = rememberLazyListState(),
     scrollable: Boolean = true,
+    label: String = tile.label, // "history" on the history page (§5.3)
 ) {
     val units = LocalWpUnits.current
     val size = metrics.sizeDp(tile.size)
@@ -105,7 +106,7 @@ internal fun StartTileView(
                 }
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f)) { if (tile.size != TileSize.SMALL) TileText(tile.label, maxLines = 1) }
+                Box(Modifier.weight(1f)) { if (tile.size != TileSize.SMALL) TileText(label, maxLines = 1) }
                 when (face) {
                     TileFace.Front -> if (liveTilesPaused) {
                         // No description: the slot's state description says it.
