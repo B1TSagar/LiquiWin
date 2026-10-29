@@ -21,4 +21,5 @@ data class NotificationItemEntity(
     @ColumnInfo(name = "posted_at") val postedAt: Long,
     @ColumnInfo(name = "removed_at") val removedAt: Long?,
     @ColumnInfo(name = "is_self") val isSelf: Boolean,
+    @ColumnInfo(name = "photo_unreadable", defaultValue = "0") val photoUnreadable: Boolean = false, // §5.7's card
 )

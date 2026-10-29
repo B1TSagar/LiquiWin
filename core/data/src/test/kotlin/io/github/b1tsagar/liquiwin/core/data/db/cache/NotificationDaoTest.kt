@@ -8,6 +8,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -87,6 +88,21 @@ class NotificationDaoTest {
         dao.markRemovedExcept(setOf("n2"), now = 300)
         assertEquals(listOf("b"), unread())
         assertEquals(300L, dao.item("a")?.removedAt)
+    }
+
+    // Review Focus 2: a clear reads the notification whether or not Android then removes it
+    @Test fun readingANotificationReadsItsChatsUpToItsNewestMessage() = runTest {
+        dao.replaceNotification("n1", listOf(item("a", 100), item("m", 150, conversation = "mum")))
+        dao.replaceNotification("n2", listOf(item("b", 200, notification = "n2")))
+        dao.markNotificationRead("n1")
+        assertEquals(listOf("b"), unread())
+        assertNull(dao.item("a")!!.removedAt)
+    }
+
+    @Test fun aRepostedItemKeepsItsPhotoFlag() = runTest {
+        dao.replaceNotification("n1", listOf(item("a", 100).copy(photoUnreadable = true)))
+        dao.replaceNotification("n1", listOf(item("a", 100))) // the intake reads photos only for new messages
+        assertTrue(dao.item("a")!!.photoUnreadable)
     }
 
     @Test fun cleanUpKeepsTheNewest50PerSourceWithinTheWindowAndReturnsTheDeletedFiles() = runTest {

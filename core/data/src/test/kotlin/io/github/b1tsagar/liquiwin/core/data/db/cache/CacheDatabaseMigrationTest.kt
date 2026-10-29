@@ -10,6 +10,7 @@ import kotlinx.coroutines.test.runTest
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -43,6 +44,21 @@ class CacheDatabaseMigrationTest {
         try {
             assertEquals(listOf("a"), db.notificationDao().observeItems("app:com.whatsapp@0").first().map { it.item.key })
             assertEquals(emptyList<HiddenConversationEntity>(), db.notificationDao().observeHidden("app:com.whatsapp@0").first())
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test fun aVersion3DatabaseKeepsItsNotificationsWithNoPhotoFlags() = runTest {
+        createVersion(3, context.getDatabasePath("cache.db")) {
+            execSQL(
+                "INSERT INTO notification_item (`key`, notification_key, source_id, conversation_key, sender, posted_at, is_self) " +
+                    "VALUES ('a', 'n1', 'app:com.whatsapp@0', 'alex', 'Alex', 100, 0)",
+            )
+        }
+        val db = CacheDatabase.open(context)
+        try {
+            assertFalse(db.notificationDao().item("a")!!.photoUnreadable)
         } finally {
             db.close()
         }

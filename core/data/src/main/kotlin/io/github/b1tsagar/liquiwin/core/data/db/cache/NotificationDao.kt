@@ -82,10 +82,12 @@ abstract class NotificationDao {
         val showing = showingItemsOf(notificationKey)
         if (showing.isEmpty()) return
         setRemoved(notificationKey, now)
-        for ((conversation, items) in showing.groupBy { it.sourceId to it.conversationKey }) {
-            markRead(conversation.first, conversation.second, items.maxOf { it.postedAt })
-        }
+        readUpToNewest(showing)
     }
+
+    /** Reads each of the notification's chats up to its newest message there (§5.5's clear). Leaves `removedAt` alone. */
+    @Transaction
+    open suspend fun markNotificationRead(notificationKey: String) = readUpToNewest(showingItemsOf(notificationKey))
 
     // Filtered here rather than with NOT IN, which could pass API 29's limit of 999 variables.
     @Transaction
@@ -163,6 +165,12 @@ abstract class NotificationDao {
 
     @Query("DELETE FROM conversation_read WHERE last_read_at < :cutoff")
     protected abstract suspend fun deleteReadMarksBefore(cutoff: Long)
+
+    private suspend fun readUpToNewest(items: List<NotificationItemEntity>) {
+        for ((conversation, its) in items.groupBy { it.sourceId to it.conversationKey }) {
+            markRead(conversation.first, conversation.second, its.maxOf { it.postedAt })
+        }
+    }
 
     private fun List<NotificationItemEntity>.files() = flatMap { listOfNotNull(it.avatarFile, it.imageFile) }
 }
