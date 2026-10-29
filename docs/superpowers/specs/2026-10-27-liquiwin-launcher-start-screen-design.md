@@ -155,7 +155,7 @@ interface SearchProvider {
 }
 ```
 
-`PendingIntent`s for taps and replies can't be persisted. They live in an in-memory `LiveActionCache` keyed by notification key, and `TileItem.canReply` reflects whether the cache holds a reply action.
+`PendingIntent`s for taps, replies and a missed call's buttons (§5.1) can't be persisted. They live in an in-memory `LiveActionCache` keyed by notification key, and `TileItem.canReply` reflects whether the cache holds a reply action.
 
 ### 3.3 Data model
 
@@ -166,7 +166,7 @@ interface SearchProvider {
 | `tile` | id; kind (`APP`, `COMBINED`, `FOLDER`, `WIDGET`, `SHORTCUT`, `SEARCH`, `ACTION_CENTER`); title; size (`SMALL`, `MEDIUM`, `WIDE`, `LARGE`); template (`FLIP`, `PEEK`, `CYCLE`, `ICONIC`, `STATIC`); colour override; surface override; `showPreviews`; `keepReadItems24h`; `parentFolderId`; `appWidgetId`; shortcut reference; package reference |
 | `tile_source` | `tileId`, `sourceId`, `order` |
 | `tile_placement` | `tileId`, `gridWidth` (4, 6 or 8 units), `x`, `y`. One row per tile per grid width that has been arranged. |
-| `notification_item` | `key`, `sourceId`, `conversationKey`, `sender`, `text`, avatar file, image file, `postedAt`, `removedAt`, `readAt`, `isSelf`. Keeps 50 items per app and 24 hours by default. |
+| `notification_item` | `key`, `sourceId`, `conversationKey`, `sender`, `text`, avatar file, image file, whether it had a photo LiquiWin couldn't read (§5.7), `postedAt`, `removedAt`, `readAt`, `isSelf`. Keeps 50 items per app and 24 hours by default. |
 | `conversation_read` | `sourceId`, `conversationKey`, `lastReadAt` |
 | `hidden_conversation` | `sourceId`, `conversationKey`, `name`, `hiddenAt`. Chats hidden from tiles (§5.8), kept until shown again. |
 
@@ -182,7 +182,7 @@ interface SearchProvider {
 App posts a notification
   → NotificationListenerService.onNotificationPosted       (moved to the IO dispatcher)
   → Normaliser: filter, extract, dedupe                    (§5.2)
-  → NotificationStore (Room)  +  LiveActionCache (memory: tap and reply PendingIntents)
+  → NotificationStore (Room)  +  LiveActionCache (memory: tap, reply and missed-call PendingIntents)
   → AppNotificationSource(sourceId).items / unreadCount    (Flow)
   → TileStateAggregator: merges all sources of a tile → TileState(rotation, unread, faces)
   → TileRenderer + TileAnimator                            (only tiles on screen)
@@ -381,7 +381,7 @@ A single tile can still be overridden back to flat solid. Glass-only facets (tin
 - unread count at bottom right, shown as "99+" above 99
 - On a combined tile: up to four app icons, with per-app counts on wide and large tiles, plus the total.
 
-**Content faces.** Medium and wide tiles have one for each of the rotation's 5 newest items (§5.3). A large tile has one, which lists them all. Layout depends on size:
+**Content faces.** Medium and wide tiles have one for each of the rotation's 5 newest items (§5.3). A large tile has one, which lists them all. A page (§5.3) shows its items on the same faces. Layout depends on size:
 
 | Size | Content face |
 |---|---|
@@ -395,6 +395,8 @@ On a combined tile, each content face also shows the item's app icon at top righ
 **Chat button.** Each item on a content face has a speech-bubble chat button at its bottom right, drawn at 24 WP px, with a 48 dp touch area. It opens the item's chat window (§5.7), whether or not the app takes replies. On a large tile, each row has its own. (The owner's calls after stage 2 part 1, and after the chat window's first build, whose 16 WP px button was hard to hit.)
 
 **A large tile's list** scrolls inside the tile. A swipe that starts on it scrolls the list first, and start only once the list has reached its end. While there are more than three items, a thin scrollbar beside the list shows which part is in view. Long-press still lifts the tile, and in edit mode a swipe scrolls start, not the list. TalkBack reads the rows in view, and the tile's **older messages** and **newer messages** actions move the list three rows at a time. A scrolled list holds its tile still (§5.4). (The owner's call after the chat window's first build, so that any message can be picked to reply to.)
+
+**Missed calls.** An item from a missed-call notification (category `missed_call`) shows that notification's own buttons in place of its chat button: up to two, in the app's order and with the app's labels (on most phones **Call back** and **Message**), each with a 48 dp touch area. On a large tile they sit in the item's row. They show only while the notification is still posted. What they do is in §5.5. (The owner's call after the large tile's list was built.)
 
 **Templates.** New tiles default to `FLIP`.
 
@@ -418,11 +420,12 @@ On a combined tile, each content face also shows the item's app icon at top righ
 
 **It extracts:**
 - title, text and big text
-- MessagingStyle messages: sender, sender icon, text, timestamp, whether it's from you, and an image URI when readable
+- MessagingStyle messages: sender, sender icon, text, timestamp, whether it's from you, and its image URI, noting when LiquiWin can't read the image (§5.7)
 - conversation title, whether it's a group, and the shortcut id
 - the large icon and big picture
 - the content intent
 - the reply action: `SEMANTIC_ACTION_REPLY`, or any action with a free-form `RemoteInput`
+- a missed call's actions, up to two (§5.1)
 
 **Dedupe.** A message is identified by package, conversation key, sender, timestamp and a hash of the text. When an app re-posts the same conversation, it's updated in place.
 
@@ -432,13 +435,20 @@ On a combined tile, each content face also shows the item's app icon at top righ
 
 ### 5.3 Rotation, unread and read
 
-- **Rotation.** A tile's rotation is its unread items, newest first. Medium and wide tiles turn through its 5 newest, and a large tile lists them all (§5.1). With "keep read items for 24 h" on, read items follow the unread ones. If the rotation is empty, the tile shows its front face.
+- **Rotation.** A tile's rotation is its unread items, newest first. Medium and wide tiles turn through its 5 newest, and a large tile lists them all (§5.1). With "keep read items for 24 h" on, read items follow the unread ones. If the rotation is empty, the tile shows its front face, unless it's on its history page.
 - **Hidden chats** (§5.8) are left out of the rotation and the unread count.
+- **Pages.** A swipe down (§5.5) turns a medium, wide or large tile from its front to a page, and the next swipe down turns it back to its front. (The owner's call after the large tile's list was built.)
+  - **New messages**, while the rotation has items: the rotation, without the front.
+  - **History**, while it hasn't: the tile's read items still stored (§3.3), newest first, without your own messages or hidden chats. The label strip reads **history** in place of the tile's name.
+  - Medium and wide tiles turn through a page's 5 newest items on the timer (§5.4), never to the front. A large tile lists them all (§5.1).
+  - A page stays until it's swiped back, with two exceptions. A new item turns a tile on its history page to that item, on its new messages page. A new messages page whose items have all been read or cleared gives way to the front.
+  - `STATIC` and `ICONIC` tiles have no pages, and nor does a tile with nothing for either page.
 - **Unread.** A MessagingStyle message counts as unread if it's newer than its conversation's `lastReadAt`. Any other notification counts as 1 while it's present and its `readAt` is empty.
 - **An item becomes read when:**
   - its notification is removed, because it was opened or swiped away elsewhere
   - the user opens it from a tile, the hub or the Action Center, which sets `lastReadAt`
   - the user opens its chat window (§5.7)
+  - the user clears it from a tile (§5.5)
   - the user taps **mark all read** in the hub
 - **Read state is local.** LiquiWin never triggers apps' own mark-as-read actions, because they would send read receipts.
 
@@ -447,23 +457,25 @@ On a combined tile, each content face also shows the item's app icon at top righ
 Tiles animate the way Windows Phone's did: a single timer for the whole start screen starts one tile at a time.
 
 - Only tiles on screen animate, and only while the start screen is resumed and the display is on.
-- **The timer.** The first tick comes 2.5 s after the start screen appears, then every 0.1–3 s at random, in 100 ms steps. Each tick moves one random tile on screen to its next face. Only tiles with a non-empty rotation (§5.3) and a moving template (not `ICONIC` or `STATIC`) take part. A tile that has just moved sits out the next 3 ticks, and if every such tile is sitting out, the tick does nothing.
+- **The timer.** The first tick comes 2.5 s after the start screen appears, then every 0.1–3 s at random, in 100 ms steps. Each tick moves one random tile on screen to its next face. Only tiles with more than one face to turn through and a moving template (not `ICONIC` or `STATIC`) take part: a front with a non-empty rotation (§5.3), or a medium or wide tile's page of two or more items. A tile that has just moved sits out the next 3 ticks, and if every such tile is sitting out, the tick does nothing.
 - **Tile pace** (part of the motion facet) scales the gaps between ticks: normal is the Windows Phone timing above, calm doubles the gaps and lively halves them.
 - **New items jump the queue.** A new item makes its tile flip to it within 1 s, even while another tile is moving, debounced to once per 600 ms per tile.
 - **A large tile's list** (§5.1). While it's scrolled away from its top, its tile sits out the ticks, so the row being looked for doesn't turn away. A new item scrolls it back to the top, unless it's being scrolled at that moment.
-- With motion off, a tile shows its newest item statically and there's no timer.
+- **A touched tile** sits out the ticks while a finger is on it, so a message being swiped doesn't turn away (§5.5).
+- With motion off, a tile shows its newest item statically, or its page's newest (§5.3), and there's no timer. A swipe down changes the face at once.
 
-### 5.5 Taps
+### 5.5 Taps and swipes
 
 | Where | Single-app tile | Combined tile |
 |---|---|---|
 | Content face body | Open that item | Open that item |
 | Chat button | Its chat window (§5.7) | Its chat window (§5.7) |
+| A missed call's button (§5.1) | What that button does in Android's notification panel, except that a reply button opens the chat window (§5.7) | The same |
 | Label strip, or anywhere on the front face | Open the app | Open the hub page |
 | Small tile | Open the app | Open the hub page |
 | Long-press | Edit mode | Edit mode |
 
-On a large tile, the content face body and the chat button are those of the row under the finger, wherever the list has scrolled to.
+On a large tile, the content face body, the chat button and a missed call's buttons are those of the row under the finger, wherever the list has scrolled to.
 
 "Open that item" tries each of these in turn:
 1. the notification's content intent
@@ -472,6 +484,17 @@ On a large tile, the content face body and the chat button are those of the row 
 4. a "this app isn't installed any more" message
 
 Opening an item marks it read.
+
+**Swipes**, outside edit mode and on a tile that isn't paused (§9). (The owner's calls after the large tile's list was built.)
+
+- **Sideways on a message.** A sideways swipe that starts on a message, on a medium or wide tile's content face or a large tile's row, moves that message with the finger while the tile holds still. **reply** shows beneath a message moving left, and **clear** beneath one moving right. Let go past a third of the tile's width, or with a flick, and:
+  - **left** opens the message's chat window (§5.7)
+  - **right** clears it. LiquiWin removes its notification from Android's panel (`cancelNotification(key)`), with all of that notification's messages, as a swipe in the panel would, and marks them read (§5.3), so they leave the tile. The chat window still shows them until they age out (§3.3).
+
+  Let go short of that, and the message slides back. On a history page (§5.3) a message moves only left, because its messages are read already and age out by themselves.
+- **Down on a tile.** While start is scrolled all the way up, a swipe down that starts on a medium, wide or large tile with a page to show (§5.3), and covers a third of the tile's height or is a flick, turns the tile with its template's motion: from its front to its page, or from a page or a content face back to its front. On a large tile whose list isn't at its top, the swipe scrolls the list as before. A tile with no page to show, and any tile while start is scrolled down, leaves the swipe to scroll start.
+- Every other swipe does what it did before: sideways ones change between start and the app list (§4.2), and edit mode keeps its own (§4.3).
+- **TalkBack** can't swipe a tile, so each swipe is also an action. Each message in view gets **clear \<sender\>**, except on a history page, and **chat with \<sender\>** already opens its chat window. The tile gets **show new messages** or **show history** on its front, for the page it would turn to, and **show front** on a page or a content face. A missed call's buttons are actions named with their labels and the sender, such as **Call back Alex**.
 
 ### 5.6 Hub page
 
@@ -487,12 +510,13 @@ Opening an item marks it read.
 
 Every item opens its chat, not only items that take replies, and the window is where a message too long for its tile is read in full. (The owner's calls after stage 2 part 1.)
 
-- **Opening.** An item's chat button opens it: on tile content faces (§5.1), hub rows and Action Center notifications. It shows that item's chat, meaning its `sourceId` and `conversationKey`.
+- **Opening.** An item's chat button opens it: on tile content faces (§5.1), hub rows and Action Center notifications. A swipe left on a tile's message opens it too (§5.5). It shows that item's chat, meaning its `sourceId` and `conversationKey`.
 - **The window.** An overlay inside the launcher, anchored above the keyboard, in the style of Windows Phone Messaging. It opens with the swivel animation, and Back or a tap outside it closes it. It contains:
   - a header with the avatar, name and app icon, and two text buttons: **open in app** and **hide this chat** (§5.8). The app icon is a button too, which TalkBack reads as "open in \<app\>" and which does what **open in app** does. (The owner's call after the chat window's first build.)
-  - bubbles for the chat's stored messages, oldest at the top: incoming in the accent colour with a top-left tail, yours in a darker shade with a bottom-right tail. In a group, the sender's name sits above each incoming bubble. Each bubble has its time under it, and a photo shows inside its bubble. The window opens scrolled to the newest.
+  - bubbles for the chat's stored messages, oldest at the top: incoming in the accent colour with a top-left tail, yours in a darker shade with a bottom-right tail. In a group, the sender's name sits above each incoming bubble. Each bubble has its time under it, and a photo shows inside its bubble. A photo LiquiWin couldn't read shows as a card instead, reading **photo · open in \<app\>**, which opens the message as §5.5 does. Most chat apps let only Android's own notification panel open the photos in their notifications. (The owner's call after the large tile's list was built.) The window opens scrolled to the newest.
   - a scrollbar: whenever the bubbles are taller than their space, a thin bar along the right edge shows, by its length and position, which part is in view
   - when `canReply` is true, a text box that's already focused, with the keyboard showing, and a send button. Otherwise there's no text box, and the header's **open in app** is the way to reply. After a launcher restart, replying comes back once the app posts its notification again.
+  - when the chat's newest message is a missed call whose notification is still posted (§5.1), its buttons other than a reply button, in a row above the text box, or in its place when the call takes no reply. (The owner's call after the large tile's list was built.)
 - **Sending.** Only on the send button. LiquiWin fills the action's `RemoteInput` (`RemoteInput.addResultsToIntent`, source set to free-form input) and sends its `PendingIntent`. Your bubble appears straight away, marked "sending…", and is replaced when the app re-posts the conversation including your message. The window stays open, so you can send another.
 - **If sending fails** (`PendingIntent.CanceledException`, or the reply action has gone since the window opened): the text is kept, and the window shows "Couldn't send. Open \<app\> to reply." with an open button.
 - **Read.** Opening the window marks the chat read (§5.3), in LiquiWin only, so no read receipt is sent.
@@ -642,7 +666,7 @@ The standard Windows Phone settings list: each entry shows a title with its curr
 | Staying awake on Samsung | None; the user sets App info → Battery → Unrestricted | Setup step 6 | The paused banner appears if tiles pause |
 | Haptics | `VIBRATE` (normal permission) | — | — |
 
-**Never requested:** `INTERNET`, `QUERY_ALL_PACKAGES`, `SYSTEM_ALERT_WINDOW`, any accessibility service, storage, location, `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`.
+**Never requested:** `INTERNET`, `QUERY_ALL_PACKAGES`, `SYSTEM_ALERT_WINDOW`, any accessibility service, storage, location, `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, `CALL_PHONE`, `SEND_SMS`. A missed call's buttons are its app's own (§5.1).
 
 **Privacy rules:**
 - Notification content is stored only in app-private storage.
@@ -659,6 +683,8 @@ The standard Windows Phone settings list: each entry shows a title with its curr
 | Listener disconnected or killed (Samsung) | `onListenerDisconnected` → `requestRebind`. On every resume, if access is granted but the listener isn't connected, LiquiWin rebinds. After 3 disconnects in 24 h it shows the "keep tiles awake" guide. |
 | Tap target gone | The fallback chain in §5.5 |
 | Quick reply fails | The text is kept, and an "open \<app\> to reply" button appears (§5.7) |
+| A missed call's button fails (`PendingIntent.CanceledException`) | The item opens through the fallback chain in §5.5 |
+| A cleared notification stays in Android's panel, because its app doesn't let it be cleared | It still leaves the tile, as read (§5.3) |
 | App uninstalled | Its `APP` tile is removed and its source is taken out of combined tiles. A combined tile left with no sources is removed. Folders update. |
 | App updated, or its icon changed | The icon cache refreshes through `LauncherApps.Callback` |
 | Work apps paused | Those apps and their tiles are greyed out |
@@ -680,7 +706,7 @@ The standard Windows Phone settings list: each entry shows a title with its curr
 
 - **Unit tests** (JVM, with Robolectric where Android classes are needed):
   - Layout engine: first-fit flow, compaction, per-width arrangements, collision re-flow after a resize, folder create and dissolve.
-  - Normaliser: run against fixture notifications from WhatsApp, Instagram, Snapchat, Messenger, Telegram and Gmail. The fixtures are recorded once on the owner's Galaxy with a debug-only capture screen, which strips names and text before saving.
+  - Normaliser: run against fixture notifications from WhatsApp, Instagram, Snapchat, Messenger, Telegram and Gmail, and missed calls. The fixtures are recorded once on the owner's Galaxy with a debug-only capture screen, which strips names and text before saving.
   - Unread counting and dedupe, the tap fallback chain, the animation timer (one tile per tick, the 3-tick rest, new items jumping the queue), search ranking, and facet/preset resolution (including when the label switches to "Custom").
 - **Database tests:** Room DAO tests and a migration test for every schema version.
 - **Screenshot tests** (Roborazzi): every flat preset in light and dark × every tile size × every template, the hub, the chat window, the app list styles and the Action Center layouts, plus app names in Devanagari and Cyrillic to check the font fallback. A change to one style can't silently break another.
@@ -688,14 +714,15 @@ The standard Windows Phone settings list: each entry shows a title with its curr
   - Instrumented screenshot tests run the Glass preset on an Android 14+ emulator with GPU rendering, and the results are reviewed on the Galaxy.
   - The morph state machine (which elements merge, spring targets, hit-test positions) and the signed-distance geometry are unit-tested on the JVM.
   - Macrobenchmark runs the Glass preset separately, covering scrolling plus pin and unpin morphs.
-- **Compose UI tests:** edit mode (move, resize, unpin, making a folder), the tile editor, hub tabs and swipe, the chat window (focus and the keyboard appearing, sending, the failure state, a chat that takes no replies, the scrollbar), hiding a chat and showing it again, and first-time setup.
-- **`:tools:notifier`:** a debug app that posts WhatsApp-like and Instagram-like MessagingStyle notifications, with reply actions that echo the reply back. It allows end-to-end tests of tiles and quick reply on the emulator without real accounts.
+- **Compose UI tests:** edit mode (move, resize, unpin, making a folder), the tile editor, hub tabs and swipe, the chat window (focus and the keyboard appearing, sending, the failure state, a chat that takes no replies, the scrollbar), hiding a chat and showing it again, a tile's swipes (sideways on a message, and down with start at its top, scrolled down and in edit mode), a missed call's buttons, the photo card, and first-time setup.
+- **`:tools:notifier`:** a debug app that posts WhatsApp-like and Instagram-like MessagingStyle notifications, with reply actions that echo the reply back. It allows end-to-end tests of tiles and quick reply on the emulator without real accounts. It also posts a missed call whose buttons only log, and a chat photo LiquiWin isn't allowed to read.
 - **Macrobenchmark:** cold and warm start, start screen scroll jank, and a Baseline Profile.
 - **Manual checklist on the Galaxy:**
   - setting it as Home, gesture navigation and back (expect the longer hold for recent apps, §1.5)
   - granting and revoking notification access
   - a day under battery management with the sleeping-apps settings
   - real messages and quick replies in WhatsApp, Instagram, Messenger and Telegram
+  - a real missed call, with its **Call back** and **Message** buttons on a tile
   - Snapchat updates (open the app; their chat window has no text box)
   - Samsung widgets
   - a work profile (apps in Samsung's Secure Folder are invisible to all third-party launchers, which is expected)
