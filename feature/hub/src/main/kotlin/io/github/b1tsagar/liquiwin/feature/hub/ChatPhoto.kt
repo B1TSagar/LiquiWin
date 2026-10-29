@@ -8,6 +8,7 @@ import android.view.View
 import android.widget.ImageView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -22,8 +23,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.viewinterop.AndroidView
 import io.github.b1tsagar.liquiwin.core.design.motion.animatorOn
@@ -65,17 +66,23 @@ internal fun MovingPhoto(gif: AnimatedImageDrawable) {
         }
     }
     val state = if (playing) "playing" else null
-    AndroidView(
-        { ImageView(it).apply { adjustViewBounds = true; importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO } },
+    // TalkBack gets an AndroidView as the bare view, without its semantics, so they sit on this wrapper. Clearing the
+    // view's own keeps the photo one whole node, which a finger exploring it finds too.
+    Box(
         Modifier
             .fillMaxWidth()
             .clickable(onClickLabel = "play", role = Role.Button) { plays++ }
-            .semantics {
+            .clearAndSetSemantics {
                 contentDescription = "photo"
                 if (state != null) stateDescription = state
             },
-        update = { it.setImageDrawable(gif) },
-    )
+    ) {
+        AndroidView(
+            { ImageView(it).apply { adjustViewBounds = true; importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO } },
+            Modifier.fillMaxWidth(),
+            update = { it.setImageDrawable(gif) },
+        )
+    }
 }
 
 private const val PLAY_MS = 5_000L
