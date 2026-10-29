@@ -487,8 +487,8 @@ Opening an item marks it read.
 
 **Swipes**, outside edit mode and on a tile that isn't paused (§9). (The owner's calls after the large tile's list was built.)
 
-- **Sideways on a message.** A sideways swipe that starts on a message, on a medium or wide tile's content face or a large tile's row, moves that message with the finger while the tile holds still. **reply** shows beneath a message moving left, and **clear** beneath one moving right. Let go past a third of the tile's width, or with a flick, and:
-  - **left** opens the message's chat window (§5.7)
+- **Sideways on a message.** A sideways swipe that starts on a message, on a medium or wide tile's content face or a large tile's row, moves that message with the finger while the tile holds still. **reply** shows beneath a message moving left, or a missed call's first button, such as **call back**, and **clear** beneath one moving right. Let go past a third of the tile's width, or with a flick, and:
+  - **left** opens the message's chat window (§5.7). On a missed call showing its buttons (§5.1), it presses the first of them instead, as a tap on it would: on most phones **Call back**, which calls back at once. (The owner's call after the tile gestures were built.)
   - **right** clears it. LiquiWin removes its notification from Android's panel (`cancelNotification(key)`), with all of that notification's messages, as a swipe in the panel would, and marks them read (§5.3), so they leave the tile. The chat window still shows them until they age out (§3.3).
 
   Let go short of that, and the message slides back. On a history page (§5.3) a message moves only left, because its messages are read already and age out by themselves.
@@ -510,7 +510,7 @@ Opening an item marks it read.
 
 Every item opens its chat, not only items that take replies, and the window is where a message too long for its tile is read in full. (The owner's calls after stage 2 part 1.)
 
-- **Opening.** An item's chat button opens it: on tile content faces (§5.1), hub rows and Action Center notifications. A swipe left on a tile's message opens it too (§5.5). It shows that item's chat, meaning its `sourceId` and `conversationKey`.
+- **Opening.** An item's chat button opens it: on tile content faces (§5.1), hub rows and Action Center notifications. A swipe left on a tile's message opens it too, unless it's a missed call showing its buttons (§5.5). It shows that item's chat, meaning its `sourceId` and `conversationKey`.
 - **The window.** An overlay inside the launcher, anchored above the keyboard, in the style of Windows Phone Messaging. It opens with the swivel animation, and Back or a tap outside it closes it. It contains:
   - a header with the avatar, name and app icon, and two text buttons: **open in app** and **hide this chat** (§5.8). The app icon is a button too, which TalkBack reads as "open in \<app\>" and which does what **open in app** does. (The owner's call after the chat window's first build.)
   - bubbles for the chat's stored messages, oldest at the top: incoming in the accent colour with a top-left tail, yours in a darker shade with a bottom-right tail. In a group, the sender's name sits above each incoming bubble. Each bubble has its time under it, and a photo shows inside its bubble. A photo LiquiWin couldn't read shows as a card instead, reading **photo · open in \<app\>**, which opens the message as §5.5 does. Most chat apps let only Android's own notification panel open the photos in their notifications. (The owner's call after the large tile's list was built.) The window opens scrolled to the newest.

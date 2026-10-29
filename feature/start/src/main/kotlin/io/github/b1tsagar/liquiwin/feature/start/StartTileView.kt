@@ -95,7 +95,7 @@ internal fun StartTileView(
     // two 48 dp buttons on a phone. The label gives way to them.
     val call = (face as? TileFace.Item)?.item?.takeIf { it.buttons.isNotEmpty() }
     Box(modifier.size(size).clipToBounds()) {
-        if (slid != null) SwipeUnderlay(slid, inset, Modifier.matchParentSize())
+        if (slid != null) SwipeUnderlay(slid, swipeLeftLabel(call), inset, Modifier.matchParentSize())
         Box(Modifier.matchParentSize().slidBy(slid).background(LocalLiquiWinColors.current.accent)) {
             if (face == TileFace.Front) IconImage(appIcon?.bitmap, min(size.width, size.height) * 0.5f, Modifier.align(Alignment.Center))
             if (photo != null) {
@@ -155,14 +155,18 @@ internal fun StartTileView(
     }
 }
 
-// Beneath a swiped message, what letting go would do: reply at its end as it moves left, clear at its start as it moves right.
+// Beneath a swiped message, what letting go would do: [left] at its end as it moves left, clear at its start as it moves
+// right.
 @Composable
-private fun SwipeUnderlay(swipe: MessageSwipe, inset: Dp, modifier: Modifier) {
+private fun SwipeUnderlay(swipe: MessageSwipe, left: String, inset: Dp, modifier: Modifier) {
     Box(modifier.background(lerp(LocalLiquiWinColors.current.accent, Color.Black, 0.3f)).padding(horizontal = inset)) {
-        if (swipe.offsetPx < 0) TileText("reply", maxLines = 1, Modifier.align(Alignment.CenterEnd))
+        if (swipe.offsetPx < 0) TileText(left, maxLines = 1, Modifier.align(Alignment.CenterEnd))
         if (swipe.offsetPx > 0) TileText("clear", maxLines = 1, Modifier.align(Alignment.CenterStart))
     }
 }
+
+// A swipe left presses a missed call's first button, in the button's own words, and opens anything else's chat (§5.5).
+private fun swipeLeftLabel(item: TileItem?) = item?.buttons?.firstOrNull()?.label?.lowercase(Locale.getDefault()) ?: "reply"
 
 private fun Modifier.slidBy(swipe: MessageSwipe?) = offset { IntOffset(swipe?.offsetPx?.roundToInt() ?: 0, 0) }
 
@@ -179,7 +183,7 @@ private fun StackList(items: List<TileItem>, state: LazyListState, scrollable: B
             items(items, key = { it.key }) { item ->
                 val slid = swipe?.takeIf { it.key == item.key }
                 Box(Modifier.height(row).fillMaxWidth()) {
-                    if (slid != null) SwipeUnderlay(slid, 0.dp, Modifier.matchParentSize())
+                    if (slid != null) SwipeUnderlay(slid, swipeLeftLabel(item), 0.dp, Modifier.matchParentSize())
                     Box(Modifier.matchParentSize().slidBy(slid).background(LocalLiquiWinColors.current.accent)) {
                         // The end padding keeps the text out from under the row's chat button. A missed call's text is one
                         // line, above its buttons.

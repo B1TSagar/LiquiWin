@@ -514,9 +514,9 @@ private fun TileSlot(
             }
     }
 
-    // Letting go of a sideways swipe (§5.5): left opens the message's chat, and right clears it, sliding it out until it
-    // has left the tile, for at most 1 s. Then, or short of either, it slides back. The next sideways swipe cuts its
-    // slides short, but never the clear.
+    // Letting go of a sideways swipe (§5.5): left opens the message's chat, or presses a missed call's first button, and
+    // right clears it, sliding it out until it has left the tile, for at most 1 s. Then, or short of either, it slides
+    // back. The next sideways swipe cuts its slides short, but never the clear.
     val letting = remember { JobRef() }
     val letGo by rememberUpdatedState { message: TileItem, to: Sideways?, widthPx: Float ->
         letting.value = scope.launch(start = CoroutineStart.UNDISPATCHED) {
@@ -525,7 +525,8 @@ private fun TileSlot(
                 swipe = MessageSwipe(message.key, x)
             }
             when (to) {
-                Sideways.CHAT -> controller.chat(current, coords.value, editing, message)
+                Sideways.CHAT -> if (message.buttons.isEmpty()) controller.chat(current, coords.value, editing, message)
+                else controller.press(current, coords.value, editing, message, 0)
                 Sideways.CLEAR -> {
                     try { slide(widthPx) } finally { controller.clear(message) }
                     withTimeoutOrNull(1_000) { snapshotFlow { currentFaces }.first { faces -> faces.none { f -> f.shownItems.any { it.key == message.key } } } }

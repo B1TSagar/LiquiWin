@@ -25,6 +25,7 @@ import io.github.b1tsagar.liquiwin.core.testing.FakeTileSource
 import io.github.b1tsagar.liquiwin.core.testing.FakeTileStore
 import io.github.b1tsagar.liquiwin.core.testing.MainDispatcherRule
 import io.github.b1tsagar.liquiwin.core.testing.testApp
+import io.github.b1tsagar.liquiwin.core.testing.testCall
 import io.github.b1tsagar.liquiwin.core.testing.testItem
 import io.github.b1tsagar.liquiwin.core.tiles.model.SourceId
 import io.github.b1tsagar.liquiwin.core.tiles.source.SourceRegistry
@@ -323,6 +324,18 @@ class LiveTilesTest {
         swipe(1, x = -0.5f)
         assertEquals(listOf(b), chats)
         assertEquals("1 unread, Alex: running late", said(1))
+    }
+
+    // The owner's call after the tile gestures were built: a missed call's swipe left presses its first button, call back
+    @Test fun aSwipeLeftOnAMissedCallPressesItsFirstButton() {
+        motionOff()
+        val call = testCall(source = chat.id)
+        chat.itemState.value = listOf(call)
+        show()
+        swipe(1, x = -0.5f)
+        compose.mainClock.advanceTimeBy(2_000) // the tiles turn away before the press
+        assertEquals(listOf(call to 0), chat.pressed)
+        assertEquals(emptyList<TileItem>(), chats)
     }
 
     @Test fun aSwipeRightOnAMessageClearsIt() {

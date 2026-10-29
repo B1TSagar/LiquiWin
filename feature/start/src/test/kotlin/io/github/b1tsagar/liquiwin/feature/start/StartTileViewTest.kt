@@ -13,6 +13,7 @@ import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.assertWidthIsEqualTo
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -113,6 +114,13 @@ class StartTileViewTest {
         swipe = null
         compose.onNodeWithText("reply").assertDoesNotExist()
         compose.onNodeWithText("clear").assertDoesNotExist()
+    }
+
+    // The owner's call after the tile gestures were built: beneath a missed call moving left, the button letting go presses
+    @Test fun aSwipedMissedCallShowsItsFirstButtonBeneath() {
+        compose.setContent { LiquiWinTheme { StartTileView(tile(TileSize.MEDIUM), metrics, { null }, face = TileFace.Item(testCall()), swipe = MessageSwipe("call", -60f)) } }
+        compose.onNodeWithText("reply", useUnmergedTree = true).assertDoesNotExist()
+        compose.onAllNodesWithText("call back", useUnmergedTree = true).assertCountEquals(2) // the button, and beneath the call
     }
 
     @Test fun aMissedCallShowsItsButtonsInPlaceOfTheChatButton() {
