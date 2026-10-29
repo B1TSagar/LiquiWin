@@ -189,6 +189,11 @@ class StartViewModel(
         }
     }
 
+    /** Clears [item] through its source: its notification leaves Android's panel, and its messages the tile (§5.5). */
+    fun clear(item: TileItem) {
+        viewModelScope.launch { sources.source(item.sourceId)?.clear(item) }
+    }
+
     /** Puts [chat] back on tiles (§5.8). */
     fun showAgain(chat: HiddenChat) {
         viewModelScope.launch { sources.source(chat.sourceId)?.showAgain(chat.conversationKey) }

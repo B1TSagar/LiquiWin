@@ -29,6 +29,7 @@ import io.github.b1tsagar.liquiwin.core.tiles.model.SourceId
 import io.github.b1tsagar.liquiwin.core.tiles.source.SourceRegistry
 import io.github.b1tsagar.liquiwin.core.tiles.source.TileItem
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -146,7 +147,13 @@ class LiveTilesTest {
         Settings.Global.putFloat(compose.activity.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 0f) // the list shows at once
         showLarge(messages = 7)
         assertEquals("7 unread, P6: t6, P5: t5, P4: t4", said(1))
-        assertEquals(listOf("open App 1", "open P5", "open P4", "chat with P6", "chat with P5", "chat with P4", "older messages", "show front"), actions(1))
+        assertEquals(
+            listOf(
+                "open App 1", "open P5", "open P4", "chat with P6", "chat with P5", "chat with P4", "clear P6", "clear P5", "clear P4",
+                "older messages", "show front",
+            ),
+            actions(1),
+        )
         page(1, "older messages")
         assertEquals("7 unread, P3: t3, P2: t2, P1: t1", said(1))
         page(1, "older messages") // as far as the list goes
@@ -302,5 +309,78 @@ class LiveTilesTest {
         compose.onNodeWithTag("tile-1").performTouchInput { moveBy(Offset(0f, -height / 4f)); up() }
         compose.mainClock.advanceTimeBy(2_000)
         assertEquals("1 unread, Alex: running late", said(1))
+    }
+
+    @Test fun aSwipeLeftOnAMessageOpensItsChat() {
+        motionOff()
+        val b = testItem("b", text = "running late", at = 20, source = chat.id)
+        chat.itemState.value = listOf(b)
+        show()
+        swipe(1, x = -0.5f)
+        assertEquals(listOf(b), chats)
+        assertEquals("1 unread, Alex: running late", said(1))
+    }
+
+    @Test fun aSwipeRightOnAMessageClearsIt() {
+        motionOff()
+        val b = testItem("b", at = 20, source = chat.id)
+        chat.itemState.value = listOf(b)
+        show()
+        swipe(1, x = 0.5f)
+        assertEquals(listOf(b), chat.cleared)
+        assertEquals(emptyList<TileItem>(), chats)
+    }
+
+    @Test fun aShortSlowSwipeSlidesTheMessageBackAndAFlickActs() {
+        motionOff()
+        val b = testItem("b", at = 20, source = chat.id)
+        chat.itemState.value = listOf(b)
+        show()
+        swipe(1, x = -0.25f)
+        swipe(1, x = 0.25f)
+        assertEquals(emptyList<TileItem>(), chats)
+        assertEquals(emptyList<TileItem>(), chat.cleared)
+        swipe(1, x = -0.25f, ms = 30) // a flick
+        assertEquals(listOf(b), chats)
+    }
+
+    // Review Focus 1
+    @Test fun aMostlyUpwardSwipeOnAMessageScrollsStart() {
+        motionOff()
+        chat.itemState.value = listOf(testItem("b", at = 20, source = chat.id))
+        show(pinned = 21)
+        swipe(1, x = -0.2f, y = -0.5f)
+        assertTrue(scroll.value > 0)
+        assertEquals(emptyList<TileItem>(), chats)
+    }
+
+    @Test fun onAHistoryPageAMessageCanOnlyOpenItsChat() {
+        motionOff()
+        val a = testItem("a", text = "see you", at = 10, unread = false, source = chat.id)
+        chat.itemState.value = listOf(a)
+        show()
+        page(1, "show history")
+        assertFalse(actions(1).any { it.startsWith("clear") })
+        swipe(1, x = 0.5f)
+        assertEquals(emptyList<TileItem>(), chat.cleared)
+        swipe(1, x = -0.5f)
+        assertEquals(listOf(a), chats)
+    }
+
+    @Test fun aSwipeOnALargeTilesRowActsOnThatRow() {
+        motionOff()
+        showLarge(messages = 7) // P6, P5 and P4 in view, and 0.45 of the tile down is the middle row
+        compose.onNodeWithTag("tile-1").performTouchInput {
+            swipe(Offset(centerX, height * 0.45f), Offset(centerX - width / 2, height * 0.45f), 300)
+        }
+        compose.mainClock.advanceTimeBy(100)
+        assertEquals(listOf("m5"), chats.map { it.key })
+    }
+
+    @Test fun talkBackCanClearEachMessageInView() {
+        motionOff()
+        showLarge(messages = 7)
+        page(1, "clear P5")
+        assertEquals(listOf("m5"), chat.cleared.map { it.key })
     }
 }

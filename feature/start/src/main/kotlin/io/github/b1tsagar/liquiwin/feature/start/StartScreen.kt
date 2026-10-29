@@ -7,8 +7,10 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -106,7 +108,9 @@ import io.github.b1tsagar.liquiwin.core.tiles.source.TileState
 import io.github.b1tsagar.liquiwin.feature.start.layout.Cell
 import io.github.b1tsagar.liquiwin.feature.start.live.FLING_DP_PER_S
 import io.github.b1tsagar.liquiwin.feature.start.live.LABEL_STRIP_WP_PX
+import io.github.b1tsagar.liquiwin.feature.start.live.MessageSwipe
 import io.github.b1tsagar.liquiwin.feature.start.live.STACK_SIZE
+import io.github.b1tsagar.liquiwin.feature.start.live.Sideways
 import io.github.b1tsagar.liquiwin.feature.start.live.StackLayout
 import io.github.b1tsagar.liquiwin.feature.start.live.StackRow
 import io.github.b1tsagar.liquiwin.feature.start.live.TileFace
@@ -118,6 +122,7 @@ import io.github.b1tsagar.liquiwin.feature.start.live.nextFace
 import io.github.b1tsagar.liquiwin.feature.start.live.pageFaces
 import io.github.b1tsagar.liquiwin.feature.start.live.pageFor
 import io.github.b1tsagar.liquiwin.feature.start.live.settle
+import io.github.b1tsagar.liquiwin.feature.start.live.sideways
 import io.github.b1tsagar.liquiwin.feature.start.live.tileChatTarget
 import io.github.b1tsagar.liquiwin.feature.start.live.tileTapTarget
 import io.github.b1tsagar.liquiwin.feature.start.live.turnsDown
@@ -382,10 +387,12 @@ private fun TileSlot(
     val coords = remember { CoordinatesRef() }
 
     // A swipe down turns the tile between its front and a page (§5.3, §5.5). With animations off, atFront shows the
-    // front where the face after it would show. A tile with a finger on it holds still (§5.4).
+    // front where the face after it would show. A tile with a finger on it holds still (§5.4), and a sideways swipe
+    // moves just the message under the finger.
     var page by remember { mutableStateOf<TilePage?>(null) }
     var atFront by remember { mutableStateOf(false) }
     var touched by remember { mutableStateOf(false) }
+    var swipe by remember { mutableStateOf<MessageSwipe?>(null) }
     val swipes = edit == null && !liveTilesPaused && !tile.isPaused
     val swipesNow by rememberUpdatedState(swipes)
 
@@ -507,6 +514,28 @@ private fun TileSlot(
             }
     }
 
+    // Letting go of a sideways swipe (§5.5): left opens the message's chat, and right clears it, sliding it out until it
+    // has left the tile, for at most 1 s. Then, or short of either, it slides back.
+    val letGo by rememberUpdatedState { message: TileItem, to: Sideways?, widthPx: Float ->
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            suspend fun slide(x: Float) {
+                if (animationsOn) animate(swipe?.offsetPx ?: 0f, x, animationSpec = tween(200)) { at, _ -> swipe = MessageSwipe(message.key, at) }
+                swipe = MessageSwipe(message.key, x)
+            }
+            when (to) {
+                Sideways.CHAT -> controller.chat(current, coords.value, editing, message)
+                Sideways.CLEAR -> {
+                    slide(widthPx)
+                    controller.clear(message)
+                    withTimeoutOrNull(1_000) { snapshotFlow { currentFaces }.first { faces -> faces.none { f -> f.shownItems.any { it.key == message.key } } } }
+                }
+                null -> Unit
+            }
+            slide(0f)
+            swipe = null
+        }
+    }
+
     Box(
         Modifier
             .zIndex(if (selected) 1f else 0f)
@@ -537,6 +566,10 @@ private fun TileSlot(
                         shown.map { item ->
                             CustomAccessibilityAction("chat with ${item.title}") { controller.chat(current, coords.value, editing, item); true }
                         } +
+                        // The swipe right, wherever it's allowed: a history page's messages only open (§5.5).
+                        shown.takeIf { swipes && page != TilePage.HISTORY }.orEmpty().map { item ->
+                            CustomAccessibilityAction("clear ${item.title}") { controller.clear(item); true }
+                        } +
                         pages
                 } + listOfNotNull(turnAction)
                 if (actions.isNotEmpty()) customActions = actions
@@ -551,9 +584,12 @@ private fun TileSlot(
                         try {
                             // A large tile's list scrolls back to its top before a swipe down turns the tile (§5.5).
                             val turns = swipesNow && controller.startAtTop() && pageFor(current.size, currentLive) != null && !listScrolled
+                            // A sideways swipe takes the message under the finger: there's none on a front or the label strip.
+                            val message = if (swipesNow) tapTarget(down.position.y, size.height.toFloat()) else null
                             val velocity = VelocityTracker().apply { addPointerInputChange(down) }
                             var moved = Offset.Zero
                             var claimed = false
+                            var sliding = false
                             var cancelled = false
                             val up = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
                                 while (true) {
@@ -571,6 +607,12 @@ private fun TileSlot(
                                     val change = awaitPointerEvent(PointerEventPass.Main).changes.first { it.id == down.id }
                                     if (change.isConsumed || change.isOutOfBounds(size, extendedTouchPadding)) { cancelled = true; break }
                                     if (change.changedToUp()) return@withTimeoutOrNull change
+                                    // Start's scroll and the pager see the Main pass after this tile, so they let a message's sideways swipe go.
+                                    if (message != null && change.pressed && abs(moved.x) >= viewConfiguration.touchSlop && abs(moved.x) > abs(moved.y)) { // >=, as the pager's slop
+                                        change.consume()
+                                        sliding = true
+                                        break
+                                    }
                                     if (awaitPointerEvent(PointerEventPass.Final).changes.first { it.id == down.id }.isConsumed) { cancelled = true; break }
                                 }
                                 null
@@ -585,6 +627,23 @@ private fun TileSlot(
                                     if (change.pressed) continue
                                     val flingPx = FLING_DP_PER_S.dp.toPx()
                                     if (turnsDown(change.position.y - down.position.y, velocity.calculateVelocity().y, size.height.toFloat(), flingPx)) turnDown()
+                                    return@awaitEachGesture
+                                }
+                            }
+                            if (sliding && message != null) {
+                                // The message follows the finger, only leftward on a history page, and acts as it lets go.
+                                val canClear = page != TilePage.HISTORY
+                                var drag = moved.x
+                                while (true) {
+                                    swipe = MessageSwipe(message.key, if (canClear) drag else drag.coerceAtMost(0f))
+                                    val change = awaitPointerEvent(PointerEventPass.Main).changes.firstOrNull { it.id == down.id }
+                                        ?: run { letGo(message, null, size.width.toFloat()); return@awaitEachGesture }
+                                    change.consume()
+                                    velocity.addPointerInputChange(change)
+                                    drag = change.position.x - down.position.x
+                                    if (change.pressed) continue
+                                    val flingPx = FLING_DP_PER_S.dp.toPx()
+                                    letGo(message, sideways(drag, velocity.calculateVelocity().x, size.width.toFloat(), flingPx, canClear), size.width.toFloat())
                                     return@awaitEachGesture
                                 }
                             }
@@ -628,6 +687,7 @@ private fun TileSlot(
             face = drawn, unread = unread, liveTilesPaused = liveTilesPaused, stack = stack, scrollable = edit == null,
             // While a history face is drawn, through a flip's first half too.
             label = if (drawn != TileFace.Front && drawn in history) "history" else tile.label,
+            swipe = swipe,
         )
         if (selected && controller.drag == null) {
             EditControls(
@@ -740,6 +800,8 @@ private class StartController(private val viewModel: StartViewModel) {
     fun chat(tile: StartTile, coords: LayoutCoordinates?, editing: Boolean, item: TileItem) {
         if (editing || tile.isPaused) tap(tile, coords, editing, item) else onChat(item)
     }
+
+    fun clear(item: TileItem) = viewModel.clear(item)
 
     fun longPress(tile: StartTile) {
         haptic?.performHapticFeedback(HapticFeedbackType.LongPress)

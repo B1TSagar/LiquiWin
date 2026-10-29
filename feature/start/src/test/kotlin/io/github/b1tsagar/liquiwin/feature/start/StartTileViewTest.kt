@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHeightIsEqualTo
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertWidthIsEqualTo
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -20,6 +21,7 @@ import io.github.b1tsagar.liquiwin.core.testing.testApp
 import io.github.b1tsagar.liquiwin.core.testing.testItem
 import io.github.b1tsagar.liquiwin.core.tiles.model.TileSize
 import io.github.b1tsagar.liquiwin.feature.start.layout.Cell
+import io.github.b1tsagar.liquiwin.feature.start.live.MessageSwipe
 import io.github.b1tsagar.liquiwin.feature.start.live.TileFace
 import org.junit.Rule
 import org.junit.Test
@@ -93,5 +95,16 @@ class StartTileViewTest {
         compose.onNodeWithTag("tile-scrollbar", useUnmergedTree = true).assertDoesNotExist()
         face = TileFace.Stack(List(4) { testItem("m$it") })
         compose.onNodeWithTag("tile-scrollbar", useUnmergedTree = true).assertExists()
+    }
+
+    @Test fun aSwipedMessageShowsWhatLettingGoWillDo() {
+        var swipe: MessageSwipe? by mutableStateOf(MessageSwipe("a", -60f))
+        compose.setContent { LiquiWinTheme { StartTileView(tile(TileSize.MEDIUM), metrics, { null }, face = TileFace.Item(testItem("a")), swipe = swipe) } }
+        compose.onNodeWithText("reply").assertIsDisplayed()
+        swipe = MessageSwipe("a", 60f)
+        compose.onNodeWithText("clear").assertIsDisplayed()
+        swipe = null
+        compose.onNodeWithText("reply").assertDoesNotExist()
+        compose.onNodeWithText("clear").assertDoesNotExist()
     }
 }

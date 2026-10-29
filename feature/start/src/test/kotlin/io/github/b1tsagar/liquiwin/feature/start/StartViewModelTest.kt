@@ -134,6 +134,12 @@ class StartViewModelTest {
         assertEquals(emptyList<TileItem?>(), chatSource.opened)
     }
 
+    @Test fun clearingAnItemClearsItThroughItsSource() = runTest {
+        val item = testItem("a", source = chatSource.id)
+        chatViewModel().clear(item)
+        assertEquals(listOf(item), chatSource.cleared)
+    }
+
     @Test fun showAgainAsksTheChatsSource() = runTest {
         val source = FakeTileSource(SourceId.forApp("com.example.chat", 0))
         val family = HiddenChat(source.id, "family", "Family")

@@ -21,7 +21,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -43,6 +45,7 @@ import io.github.b1tsagar.liquiwin.core.design.theme.LocalWpUnits
 import io.github.b1tsagar.liquiwin.core.tiles.model.TileSize
 import io.github.b1tsagar.liquiwin.core.tiles.source.ImageRef
 import io.github.b1tsagar.liquiwin.core.tiles.source.TileItem
+import io.github.b1tsagar.liquiwin.feature.start.live.MessageSwipe
 import io.github.b1tsagar.liquiwin.feature.start.live.STACK_SIZE
 import io.github.b1tsagar.liquiwin.feature.start.live.TileFace
 import kotlin.math.roundToInt
@@ -66,6 +69,7 @@ internal fun StartTileView(
     stack: LazyListState = rememberLazyListState(),
     scrollable: Boolean = true,
     label: String = tile.label, // "history" on the history page (§5.3)
+    swipe: MessageSwipe? = null, // a message under a sideways swipe (§5.5)
 ) {
     val units = LocalWpUnits.current
     val size = metrics.sizeDp(tile.size)
@@ -73,66 +77,82 @@ internal fun StartTileView(
     val appIcon by produceState<AppIcon?>(null, app?.key, app?.versionToken) { value = app?.let { icon(it) } }
     // A wide tile shows an item's photo across the whole tile, with a one-line caption.
     val photo = (face as? TileFace.Item)?.item?.image?.takeIf { tile.size == TileSize.WIDE }
-    Box(modifier.size(size).background(LocalLiquiWinColors.current.accent)) {
-        if (face == TileFace.Front) IconImage(appIcon?.bitmap, min(size.width, size.height) * 0.5f, Modifier.align(Alignment.Center))
-        if (photo != null) {
-            val image = rememberImage(photo.file)
-            if (image != null) {
-                Image(image, contentDescription = null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
-                Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.2f)))
+    val inset = units.dp(TILE_INSET_WP_PX)
+    // An item face slides whole under a sideways swipe; a stack slides just the row (§5.5).
+    val slid = swipe?.takeIf { it.key == (face as? TileFace.Item)?.item?.key }
+    Box(modifier.size(size).clipToBounds()) {
+        if (slid != null) SwipeUnderlay(slid, inset, Modifier.matchParentSize())
+        Box(Modifier.matchParentSize().slidBy(slid).background(LocalLiquiWinColors.current.accent)) {
+            if (face == TileFace.Front) IconImage(appIcon?.bitmap, min(size.width, size.height) * 0.5f, Modifier.align(Alignment.Center))
+            if (photo != null) {
+                val image = rememberImage(photo.file)
+                if (image != null) {
+                    Image(image, contentDescription = null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
+                    Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.2f)))
+                }
             }
-        }
-        val inset = units.dp(TILE_INSET_WP_PX)
-        Column(Modifier.fillMaxSize().padding(start = inset, top = inset, end = inset, bottom = units.dp(8f))) {
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                when (face) {
-                    TileFace.Front -> Unit
-                    is TileFace.Item -> when {
-                        photo != null -> TileText(
-                            listOfNotNull(face.item.title, face.item.text).joinToString(": "),
-                            maxLines = 1,
-                            modifier = Modifier.align(Alignment.BottomStart),
-                        )
-                        tile.size == TileSize.WIDE -> ItemRow(face.item, avatarWpPx = 64f, lines = 3)
-                        else -> Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Avatar(face.item.avatar, units.dp(32f))
-                                TileText(face.item.title, maxLines = 1, sender = true)
+            Column(Modifier.fillMaxSize().padding(start = inset, top = inset, end = inset, bottom = units.dp(8f))) {
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    when (face) {
+                        TileFace.Front -> Unit
+                        is TileFace.Item -> when {
+                            photo != null -> TileText(
+                                listOfNotNull(face.item.title, face.item.text).joinToString(": "),
+                                maxLines = 1,
+                                modifier = Modifier.align(Alignment.BottomStart),
+                            )
+                            tile.size == TileSize.WIDE -> ItemRow(face.item, avatarWpPx = 64f, lines = 3)
+                            else -> Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Avatar(face.item.avatar, units.dp(32f))
+                                    TileText(face.item.title, maxLines = 1, sender = true)
+                                }
+                                face.item.text?.let { TileText(it, maxLines = 2) }
                             }
-                            face.item.text?.let { TileText(it, maxLines = 2) }
                         }
+                        is TileFace.Stack -> StackList(face.items, stack, scrollable, swipe)
                     }
-                    is TileFace.Stack -> StackList(face.items, stack, scrollable)
+                }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { if (tile.size != TileSize.SMALL) TileText(label, maxLines = 1) }
+                    when (face) {
+                        TileFace.Front -> if (liveTilesPaused) {
+                            // No description: the slot's state description says it.
+                            Image(LiquiWinIcons.Pause, contentDescription = null, Modifier.size(units.dp(16f)).testTag("live-paused"))
+                        } else if (unread > 0) {
+                            TileText(if (unread > 99) "99+" else unread.toString(), maxLines = 1)
+                        }
+                        is TileFace.Item -> ChatGlyph()
+                        is TileFace.Stack -> Unit
+                    }
                 }
             }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f)) { if (tile.size != TileSize.SMALL) TileText(label, maxLines = 1) }
-                when (face) {
-                    TileFace.Front -> if (liveTilesPaused) {
-                        // No description: the slot's state description says it.
-                        Image(LiquiWinIcons.Pause, contentDescription = null, Modifier.size(units.dp(16f)).testTag("live-paused"))
-                    } else if (unread > 0) {
-                        TileText(if (unread > 99) "99+" else unread.toString(), maxLines = 1)
-                    }
-                    is TileFace.Item -> ChatGlyph()
-                    is TileFace.Stack -> Unit
-                }
+            if (tile.isWork) {
+                Image(
+                    LiquiWinIcons.Briefcase,
+                    contentDescription = null,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(top = units.dp(8f), end = units.dp(8f)).size((metrics.unitDp / 4).dp),
+                )
             }
-        }
-        if (tile.isWork) {
-            Image(
-                LiquiWinIcons.Briefcase,
-                contentDescription = null,
-                modifier = Modifier.align(Alignment.TopEnd).padding(top = units.dp(8f), end = units.dp(8f)).size((metrics.unitDp / 4).dp),
-            )
         }
     }
 }
 
+// Beneath a swiped message, what letting go would do: reply at its end as it moves left, clear at its start as it moves right.
+@Composable
+private fun SwipeUnderlay(swipe: MessageSwipe, inset: Dp, modifier: Modifier) {
+    Box(modifier.background(lerp(LocalLiquiWinColors.current.accent, Color.Black, 0.3f)).padding(horizontal = inset)) {
+        if (swipe.offsetPx < 0) TileText("reply", maxLines = 1, Modifier.align(Alignment.CenterEnd))
+        if (swipe.offsetPx > 0) TileText("clear", maxLines = 1, Modifier.align(Alignment.CenterStart))
+    }
+}
+
+private fun Modifier.slidBy(swipe: MessageSwipe?) = offset { IntOffset(swipe?.offsetPx?.roundToInt() ?: 0, 0) }
+
 // A large tile's items, newest first, three rows in view at once (§5.1). A swipe scrolls it before start, and its
 // scrollbar sits in the tile's end margin.
 @Composable
-private fun StackList(items: List<TileItem>, state: LazyListState, scrollable: Boolean) {
+private fun StackList(items: List<TileItem>, state: LazyListState, scrollable: Boolean, swipe: MessageSwipe?) {
     val units = LocalWpUnits.current
     BoxWithConstraints(Modifier.fillMaxSize()) {
         // Whole pixels, so three rows never overflow the list.
@@ -140,10 +160,14 @@ private fun StackList(items: List<TileItem>, state: LazyListState, scrollable: B
         val row = with(LocalDensity.current) { rowPx.toDp() }
         LazyColumn(Modifier.fillMaxSize(), state, userScrollEnabled = scrollable, overscrollEffect = null) {
             items(items, key = { it.key }) { item ->
+                val slid = swipe?.takeIf { it.key == item.key }
                 Box(Modifier.height(row).fillMaxWidth()) {
-                    // The end padding keeps the text out from under the row's chat button.
-                    ItemRow(item, avatarWpPx = 48f, lines = 2, Modifier.padding(end = units.dp(32f)))
-                    ChatGlyph(Modifier.align(Alignment.BottomEnd))
+                    if (slid != null) SwipeUnderlay(slid, 0.dp, Modifier.matchParentSize())
+                    Box(Modifier.matchParentSize().slidBy(slid).background(LocalLiquiWinColors.current.accent)) {
+                        // The end padding keeps the text out from under the row's chat button.
+                        ItemRow(item, avatarWpPx = 48f, lines = 2, Modifier.padding(end = units.dp(32f)))
+                        ChatGlyph(Modifier.align(Alignment.BottomEnd))
+                    }
                 }
             }
         }

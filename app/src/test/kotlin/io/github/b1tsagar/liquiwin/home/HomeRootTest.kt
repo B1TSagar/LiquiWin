@@ -212,6 +212,27 @@ class HomeRootTest { // Review Focus 5
         compose.onNodeWithTag("tile-1").assertExists()
     }
 
+    // Review Focus 1
+    @Test fun aSidewaysSwipeOnAMessageOpensItsChatAndStaysOnStart() {
+        Settings.Global.putFloat(compose.activity.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 0f) // the message shows at once
+        val chats = FakeTileSource(SourceId.forApp(camera.key.packageName, 0))
+        val a = testMessage("a", source = chats.id)
+        chats.itemState.value = listOf(a.item)
+        chats.chatState.value = testChat(a)
+        show(pinned = listOf(camera), sources = SourceRegistry { if (it == chats.id) chats else null })
+        compose.onNodeWithTag("tile-1").performTouchInput { swipeLeft() }
+        compose.onNodeWithText("see you at 6").assertIsDisplayed() // a tile has no text, so this is the window
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() } // Back: Home would bring start back anyway
+        compose.onNodeWithTag("tile-1").assertIsDisplayed()
+    }
+
+    // Review Focus 1: a guard, passing today, that must still pass
+    @Test fun aSidewaysSwipeOnATilesFrontStillTurnsToTheAppList() {
+        show(pinned = listOf(camera))
+        compose.onNodeWithTag("tile-1").performTouchInput { swipeLeft() }
+        waitForAppList("Maps")
+    }
+
     // The owner's report: Back while an app was still opening left start empty. Android pauses LiquiWin as an app opens
     // and stops it only once the app has opened, so Back before then resumes LiquiWin without ever stopping it.
     @Test fun backWhileAnAppIsStillOpeningBringsTheTilesBack() {
