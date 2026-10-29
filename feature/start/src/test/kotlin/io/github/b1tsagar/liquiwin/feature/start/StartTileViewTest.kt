@@ -6,26 +6,33 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.assertWidthIsEqualTo
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.b1tsagar.liquiwin.core.design.theme.LiquiWinTheme
 import io.github.b1tsagar.liquiwin.core.design.theme.LocalWpUnits
 import io.github.b1tsagar.liquiwin.core.design.theme.WpUnits
 import io.github.b1tsagar.liquiwin.core.testing.testApp
+import io.github.b1tsagar.liquiwin.core.testing.testCall
 import io.github.b1tsagar.liquiwin.core.testing.testItem
 import io.github.b1tsagar.liquiwin.core.tiles.model.TileSize
 import io.github.b1tsagar.liquiwin.feature.start.layout.Cell
 import io.github.b1tsagar.liquiwin.feature.start.live.MessageSwipe
 import io.github.b1tsagar.liquiwin.feature.start.live.TileFace
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
 
 @RunWith(AndroidJUnit4::class)
 class StartTileViewTest {
@@ -106,5 +113,36 @@ class StartTileViewTest {
         swipe = null
         compose.onNodeWithText("reply").assertDoesNotExist()
         compose.onNodeWithText("clear").assertDoesNotExist()
+    }
+
+    @Test fun aMissedCallShowsItsButtonsInPlaceOfTheChatButton() {
+        val pressed = mutableListOf<Pair<String, Int>>()
+        compose.setContent {
+            LiquiWinTheme { StartTileView(tile(TileSize.MEDIUM), metrics, { null }, face = TileFace.Item(testCall()), onButton = { item, i -> pressed += item.key to i }) }
+        }
+        compose.onAllNodesWithTag("tile-chat", useUnmergedTree = true).assertCountEquals(0)
+        val buttons = compose.onAllNodesWithTag("tile-call", useUnmergedTree = true).assertCountEquals(2)
+        for (i in 0..1) buttons[i].assertWidthIsAtLeast(48.dp).assertHeightIsAtLeast(48.dp)
+        compose.onNodeWithText("call back", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("message", useUnmergedTree = true).performClick()
+        assertEquals(listOf("call" to 1), pressed)
+    }
+
+    // On a phone two 48 dp buttons are wider than a medium tile's label strip, inside its insets, so they take the
+    // tile's whole foot, half each, and the label gives way to them.
+    @Config(qualifiers = "w360dp-h780dp")
+    @Test fun aMediumTilesCallButtonsKeepTheir48DpOnA360DpPhone() {
+        compose.setContent { LiquiWinTheme { StartTileView(tile(TileSize.MEDIUM), GridMetrics(360f, 6, 24f, 12f), { null }, face = TileFace.Item(testCall())) } }
+        val buttons = compose.onAllNodesWithTag("tile-call", useUnmergedTree = true).assertCountEquals(2)
+        for (i in 0..1) buttons[i].assertWidthIsAtLeast(48.dp)
+        compose.onNodeWithText("Chat").assertDoesNotExist()
+    }
+
+    @Test fun aLargeTilesMissedCallHasItsButtonsInItsRow() {
+        compose.setContent {
+            LiquiWinTheme { StartTileView(tile(TileSize.LARGE), metrics, { null }, face = TileFace.Stack(listOf(testCall(), testItem("a")))) }
+        }
+        compose.onAllNodesWithTag("tile-call", useUnmergedTree = true).assertCountEquals(2)
+        compose.onAllNodesWithTag("tile-chat", useUnmergedTree = true).assertCountEquals(1) // the other row's
     }
 }

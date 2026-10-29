@@ -8,6 +8,7 @@ import io.github.b1tsagar.liquiwin.core.testing.FakeTileStore
 import io.github.b1tsagar.liquiwin.core.testing.MainDispatcherRule
 import io.github.b1tsagar.liquiwin.core.testing.appTile
 import io.github.b1tsagar.liquiwin.core.testing.testApp
+import io.github.b1tsagar.liquiwin.core.testing.testCall
 import io.github.b1tsagar.liquiwin.core.testing.testItem
 import io.github.b1tsagar.liquiwin.core.tiles.model.SourceId
 import io.github.b1tsagar.liquiwin.core.tiles.model.TilePlacement
@@ -138,6 +139,13 @@ class StartViewModelTest {
         val item = testItem("a", source = chatSource.id)
         chatViewModel().clear(item)
         assertEquals(listOf(item), chatSource.cleared)
+    }
+
+    @Test fun aMissedCallsButtonIsPressedThroughItsSource() = runTest {
+        val call = testCall(source = chatSource.id)
+        chatViewModel().open(1, null, null, call, button = 0)
+        assertEquals(listOf(call to 0), chatSource.pressed)
+        assertEquals(emptyList<TileItem?>(), chatSource.opened)
     }
 
     @Test fun showAgainAsksTheChatsSource() = runTest {

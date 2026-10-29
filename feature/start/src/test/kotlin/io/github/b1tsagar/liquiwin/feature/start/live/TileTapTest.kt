@@ -1,5 +1,6 @@
 package io.github.b1tsagar.liquiwin.feature.start.live
 
+import io.github.b1tsagar.liquiwin.core.testing.testCall
 import io.github.b1tsagar.liquiwin.core.testing.testItem
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -50,5 +51,13 @@ class TileTapTest {
         assertNull(at(70f, 50f)) // left of the buttons
         assertNull(at(90f, 5f)) // above the list, where the first row's button has scrolled out of sight
         assertNull(at(90f, 100f)) // the label strip opens the app
+    }
+
+    @Test fun aMissedCallHasNoChatCorner() {
+        assertNull(tileChatTarget(TileFace.Item(testCall()), 99f, 99f, widthPx = 100f, heightPx = 100f, buttonPx = 40f))
+        assertEquals(a, tileChatTarget(TileFace.Item(a), 99f, 99f, widthPx = 100f, heightPx = 100f, buttonPx = 40f))
+        val rows = TileFace.Stack(listOf(a, testCall(), c, d))
+        assertNull(tileChatTarget(rows, 90f, 50f, widthPx = 100f, heightPx = 130f, buttonPx = 20f, stack = scrolled)) // the call's row
+        assertEquals(c, tileChatTarget(rows, 90f, 70f, widthPx = 100f, heightPx = 130f, buttonPx = 20f, stack = scrolled))
     }
 }

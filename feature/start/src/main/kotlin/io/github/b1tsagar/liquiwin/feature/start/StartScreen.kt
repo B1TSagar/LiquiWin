@@ -209,11 +209,11 @@ fun StartScreen(
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val launching = remember { JobRef() }
     SideEffect {
-        controller.launch = { id, bounds, item ->
+        controller.launch = { id, bounds, item, button ->
             if (launching.value?.isActive != true) launching.value = scope.launch {
                 tapped = id
                 flip.play(Turnstile.OUT, lastTurn(id))
-                viewModel.open(id, bounds, ActivityOptions.makeCustomAnimation(context, android.R.anim.fade_in, 0).toBundle(), item)
+                viewModel.open(id, bounds, ActivityOptions.makeCustomAnimation(context, android.R.anim.fade_in, 0).toBundle(), item, button)
                 // A launch that fails leaves LiquiWin on screen, so nothing would bring the tiles back: they come back here.
                 val left = withTimeoutOrNull(1_500) { lifecycle.currentStateFlow.first { !it.isAtLeast(Lifecycle.State.RESUMED) } }
                 if (left == null) {
@@ -570,6 +570,12 @@ private fun TileSlot(
                         shown.takeIf { swipes && page != TilePage.HISTORY }.orEmpty().map { item ->
                             CustomAccessibilityAction("clear ${item.title}") { controller.clear(item); true }
                         } +
+                        // A missed call's own buttons, in its app's words.
+                        shown.flatMap { item ->
+                            item.buttons.mapIndexed { i, button ->
+                                CustomAccessibilityAction("${button.label} ${item.title}") { controller.press(current, coords.value, editing, item, i); true }
+                            }
+                        } +
                         pages
                 } + listOfNotNull(turnAction)
                 if (actions.isNotEmpty()) customActions = actions
@@ -688,6 +694,7 @@ private fun TileSlot(
             // While a history face is drawn, through a flip's first half too.
             label = if (drawn != TileFace.Front && drawn in history) "history" else tile.label,
             swipe = swipe,
+            onButton = { item, i -> controller.press(current, coords.value, editing, item, i) },
         )
         if (selected && controller.drag == null) {
             EditControls(
@@ -765,8 +772,8 @@ private class StartController(private val viewModel: StartViewModel) {
         slot.face.flipTo(nextFace(slot.faces(), slot.face.face).key)
     }
 
-    /** Opens a tile's app, or the item given, from its bounds in the window, however the screen wants to. */
-    var launch: (Long, Rect?, TileItem?) -> Unit = { id, bounds, item -> viewModel.open(id, bounds, null, item) }
+    /** Opens a tile's app, or the item given, or presses its button, from its bounds in the window, however the screen wants to. */
+    var launch: (Long, Rect?, TileItem?, Int?) -> Unit = { id, bounds, item, button -> viewModel.open(id, bounds, null, item, button) }
     var onChat: (TileItem) -> Unit = {}
     var startAtTop: () -> Boolean = { true } // whether start is scrolled all the way up; StartScreen sets it
     private var haptic: HapticFeedback? = null
@@ -787,18 +794,28 @@ private class StartController(private val viewModel: StartViewModel) {
         (d.topLeft.y / stepPx).roundToInt().coerceAtLeast(0),
     )
 
-    /** In edit mode this selects the tile; otherwise it hands the tile, its bounds in the window and any [item] to [launch]. */
-    fun tap(tile: StartTile, coords: LayoutCoordinates?, editing: Boolean, item: TileItem? = null) {
+    /**
+     * In edit mode this selects the tile; otherwise it hands the tile, its bounds in the window and any [item] and [button]
+     * to [launch].
+     */
+    fun tap(tile: StartTile, coords: LayoutCoordinates?, editing: Boolean, item: TileItem? = null, button: Int? = null) {
         if (editing) return viewModel.open(tile.id, null, null)
         val bounds = coords?.takeIf { it.isAttached }?.boundsInWindow()?.let {
             Rect(it.left.roundToInt(), it.top.roundToInt(), it.right.roundToInt(), it.bottom.roundToInt())
         }
-        launch(tile.id, bounds, item)
+        launch(tile.id, bounds, item, button)
     }
 
     /** Opens [item]'s chat. In edit mode, or on a tile whose profile is paused, it taps the tile instead. */
     fun chat(tile: StartTile, coords: LayoutCoordinates?, editing: Boolean, item: TileItem) {
         if (editing || tile.isPaused) tap(tile, coords, editing, item) else onChat(item)
+    }
+
+    /** A missed call's button (§5.5): a reply button opens the chat window; in edit mode, or on a paused tile, it's a tap. */
+    fun press(tile: StartTile, coords: LayoutCoordinates?, editing: Boolean, item: TileItem, button: Int) = when {
+        editing || tile.isPaused -> tap(tile, coords, editing, item)
+        item.buttons.getOrNull(button)?.isReply == true -> onChat(item)
+        else -> tap(tile, coords, editing, item, button)
     }
 
     fun clear(item: TileItem) = viewModel.clear(item)

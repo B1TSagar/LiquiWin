@@ -34,11 +34,13 @@ import io.github.b1tsagar.liquiwin.core.testing.FakeTileSource
 import io.github.b1tsagar.liquiwin.core.testing.FakeTileStore
 import io.github.b1tsagar.liquiwin.core.testing.MainDispatcherRule
 import io.github.b1tsagar.liquiwin.core.testing.testApp
+import io.github.b1tsagar.liquiwin.core.testing.testCall
 import io.github.b1tsagar.liquiwin.core.testing.testItem
 import io.github.b1tsagar.liquiwin.core.tiles.model.SourceId
 import io.github.b1tsagar.liquiwin.core.tiles.model.TilePlacement
 import io.github.b1tsagar.liquiwin.core.tiles.model.TileSize
 import io.github.b1tsagar.liquiwin.core.tiles.source.HiddenChat
+import io.github.b1tsagar.liquiwin.core.tiles.source.ItemButton
 import io.github.b1tsagar.liquiwin.core.tiles.source.SourceRegistry
 import io.github.b1tsagar.liquiwin.core.tiles.source.TileItem
 import kotlinx.coroutines.flow.first
@@ -271,6 +273,56 @@ class StartScreenTest {
         compose.onNodeWithTag("tile-1").performTouchInput { click(Offset(10f, 30f)) }
         compose.waitUntil(5_000) { cameraSource.opened.isNotEmpty() }
         assertEquals(listOf("m3"), cameraSource.opened.map { it?.key })
+    }
+
+    // Camera's tile with [call] as its newest item, shown at once. On a medium tile, **message** sits at the corner.
+    private fun showCall(call: TileItem): StartViewModel {
+        Settings.Global.putFloat(compose.activity.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
+        cameraSource.itemState.value = listOf(call)
+        return show()
+    }
+
+    @Test fun aMissedCallsButtonPressesIt() {
+        val call = testCall(source = cameraSource.id)
+        showCall(call)
+        compose.onNodeWithTag("tile-1").performTouchInput { click(Offset(width - 5f, height - 5f)) }
+        compose.waitUntil(5_000) { cameraSource.pressed.isNotEmpty() } // once the tiles have turned away
+        assertEquals(listOf(call to 1), cameraSource.pressed)
+        assertEquals(emptyList<TileItem>(), chats)
+    }
+
+    @Test fun aMissedCallsReplyButtonOpensItsChat() {
+        val call = testCall(buttons = listOf(ItemButton("Call back", false), ItemButton("Reply", true)), source = cameraSource.id)
+        showCall(call)
+        compose.onNodeWithTag("tile-1").performTouchInput { click(Offset(width - 5f, height - 5f)) }
+        assertEquals(listOf(call), chats)
+        assertEquals(emptyList<Pair<TileItem, Int>>(), cameraSource.pressed)
+    }
+
+    // Review Focus 5
+    @Test fun aLongPressOnAMissedCallsButtonLiftsTheTileAndPressesNothing() {
+        val viewModel = showCall(testCall(source = cameraSource.id))
+        compose.onNodeWithTag("tile-1").performTouchInput { longClick(Offset(width - 5f, height - 5f)) }
+        assertEquals(1L, viewModel.state.value.edit?.selectedId)
+        assertEquals(emptyList<Pair<TileItem, Int>>(), cameraSource.pressed)
+    }
+
+    // Review Focus 5
+    @Test fun inEditModeAMissedCallsButtonSelectsTheTile() {
+        val viewModel = showCall(testCall(source = cameraSource.id))
+        compose.onNodeWithTag("tile-2").performTouchInput { longClick() }
+        compose.onNodeWithTag("tile-1").performTouchInput { click(Offset(width - 5f, height - 5f)) }
+        assertEquals(1L, viewModel.state.value.edit?.selectedId)
+        assertEquals(emptyList<Pair<TileItem, Int>>(), cameraSource.pressed)
+    }
+
+    @OptIn(ExperimentalTestApi::class) // performCustomAccessibilityActionWithLabel
+    @Test fun talkBackCanPressAMissedCallsButtons() {
+        val call = testCall(source = cameraSource.id)
+        showCall(call)
+        compose.onNodeWithTag("tile-1").performCustomAccessibilityActionWithLabel("Call back Alex")
+        compose.waitUntil(5_000) { cameraSource.pressed.isNotEmpty() }
+        assertEquals(listOf(call to 0), cameraSource.pressed)
     }
 
     // §4.3 and §5.8; Review Focus 5

@@ -174,15 +174,16 @@ class StartViewModel(
     }
 
     /**
-     * In edit mode this selects the tile. A tile of a paused profile asks to unpause it; any other opens [item] through its
-     * source or, with no item, launches its app.
+     * In edit mode this selects the tile. A tile of a paused profile asks to unpause it; any other presses [item]'s
+     * [button] or opens [item] through its source or, with no item, launches its app.
      */
-    fun open(tileId: Long, sourceBounds: Rect?, options: Bundle?, item: TileItem? = null) {
+    fun open(tileId: Long, sourceBounds: Rect?, options: Bundle?, item: TileItem? = null, button: Int? = null) {
         if (edit.value != null) return select(tileId)
         viewModelScope.launch {
             val key = store.tiles.first().firstOrNull { it.id == tileId }?.appKey ?: return@launch
             when {
                 catalog.profiles.value.any { it.userSerial == key.userSerial && it.isPaused } -> catalog.requestUnpause(key.userSerial)
+                item != null && button != null -> sources.source(item.sourceId)?.press(item, button)
                 item != null -> sources.source(item.sourceId)?.open(item)
                 else -> catalog.launch(key, sourceBounds, options)
             }

@@ -25,7 +25,7 @@ internal fun tileTapTarget(face: TileFace, y: Float, heightPx: Float, labelStrip
 
 /**
  * The item whose chat button a tap at ([x], [y]) is on, or null (§5.5). The button is the bottom-right [buttonPx] corner of
- * an item face, and of each of a stack's rows where the list shows it.
+ * an item face, and of each of a stack's rows where the list shows it. A missed call has its own buttons there instead.
  */
 internal fun tileChatTarget(
     face: TileFace, x: Float, y: Float, widthPx: Float, heightPx: Float, buttonPx: Float, stack: StackLayout? = null,
@@ -35,7 +35,7 @@ internal fun tileChatTarget(
         TileFace.Front -> null
         is TileFace.Item -> face.item.takeIf { y >= heightPx - buttonPx }
         is TileFace.Stack -> stack?.takeIf { y >= it.top }?.rowAt(y)?.takeIf { y >= it.bottom - buttonPx }?.let { face.items.getOrNull(it.index) }
-    }
+    }?.takeIf { it.buttons.isEmpty() }
 }
 
 // The row under [y]: the top one for the margin above the list, and none for the label strip below it.
